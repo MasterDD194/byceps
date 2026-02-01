@@ -1,0 +1,37 @@
+{% extends 'layout/admin/seating.html' %}
+{% set current_page_party = party %}
+{% set current_tab = 'relocate' %}
+{% set page_title = [_('Teilnehmer umsetzen'), party.title] %}
+
+{% block body %}
+
+  <h1 class="title">{{ _('Teilnehmer umsetzen') }}</h1>
+
+  <p class="block">
+    <strong>{{ party.title }}</strong><br>
+    {{ _('Wähle einen Bereich, um Teilnehmer umzusetzen.') }}
+  </p>
+
+  {%- if areas %}
+  <table class="itemlist is-vcentered is-wide">
+    <thead>
+      <tr>
+        <th>{{ _('Area') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {%- for area in areas|sort(attribute='title') %}
+      <tr>
+        <td>
+          <a href="{{ url_for('.relocate_area', area_id=area.id) }}"><strong>{{ area.title }}</strong></a><br>
+          {{ area.slug|dim }}
+        </td>
+      </tr>
+      {%- endfor %}
+    </tbody>
+  </table>
+  {%- else %}
+  <div class="box no-data-message">{{ _('No areas exist.') }}</div>
+  {%- endif %}
+
+{%- endblock %}

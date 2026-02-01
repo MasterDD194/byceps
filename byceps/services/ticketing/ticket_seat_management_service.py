@@ -6,6 +6,8 @@ byceps.services.ticketing.ticket_seat_management_service
 :License: Revised BSD (see `LICENSE` file for details)
 """
 
+from sqlalchemy.exc import IntegrityError
+
 from byceps.database import db
 from byceps.services.seating import seat_group_service, seat_service
 
@@ -158,6 +160,90 @@ def release_seat(
     db.session.add(db_log_entry)
 
     db.session.commit()
+
+    return Ok(None)
+
+
+def swap_seats(
+    ticket_a_id: TicketID, ticket_b_id: TicketID, initiator: User
+) -> Result[None, TicketingError]:
+    """Swap the seats occupied by two tickets."""
+    db_ticket_a_result = _get_ticket(ticket_a_id)
+    if db_ticket_a_result.is_err():
+        return Err(db_ticket_a_result.unwrap_err())
+
+    db_ticket_b_result = _get_ticket(ticket_b_id)
+    if db_ticket_b_result.is_err():
+        return Err(db_ticket_b_result.unwrap_err())
+
+    db_ticket_a = db_ticket_a_result.unwrap()
+    db_ticket_b = db_ticket_b_result.unwrap()
+
+    ticket_a_belongs_to_bundle_result = (
+        _deny_seat_management_if_ticket_belongs_to_bundle(db_ticket_a)
+    )
+    if ticket_a_belongs_to_bundle_result.is_err():
+        return Err(ticket_a_belongs_to_bundle_result.unwrap_err())
+
+    ticket_b_belongs_to_bundle_result = (
+        _deny_seat_management_if_ticket_belongs_to_bundle(db_ticket_b)
+    )
+    if ticket_b_belongs_to_bundle_result.is_err():
+        return Err(ticket_b_belongs_to_bundle_result.unwrap_err())
+
+    seat_a_id = db_ticket_a.occupied_seat_id
+    seat_b_id = db_ticket_b.occupied_seat_id
+
+    if (seat_a_id is None) or (seat_b_id is None):
+        return Err(TicketingError('Ticket does not occupy a seat.'))
+
+    seat_a = seat_service.get_seat(seat_a_id)
+    seat_b = seat_service.get_seat(seat_b_id)
+
+    if (
+        (seat_a.category_id != db_ticket_b.category_id)
+        or (seat_b.category_id != db_ticket_a.category_id)
+    ):
+        return Err(
+            TicketCategoryMismatchError(
+                'Ticket and seat belong to different categories.'
+            )
+        )
+
+    seat_a_belongs_to_group_result = (
+        _deny_seat_management_if_seat_belongs_to_group(seat_a)
+    )
+    if seat_a_belongs_to_group_result.is_err():
+        return Err(seat_a_belongs_to_group_result.unwrap_err())
+
+    seat_b_belongs_to_group_result = (
+        _deny_seat_management_if_seat_belongs_to_group(seat_b)
+    )
+    if seat_b_belongs_to_group_result.is_err():
+        return Err(seat_b_belongs_to_group_result.unwrap_err())
+
+    try:
+        db_ticket_a.occupied_seat_id = None
+        db.session.flush()
+
+        db_ticket_b.occupied_seat_id = seat_a.id
+        db.session.flush()
+
+        db_ticket_a.occupied_seat_id = seat_b.id
+
+        log_entry_a = ticket_log_domain_service.build_occupy_seat_entry(
+            db_ticket_a.id, seat_b.id, seat_a.id, initiator
+        )
+        log_entry_b = ticket_log_domain_service.build_occupy_seat_entry(
+            db_ticket_b.id, seat_a.id, seat_b.id, initiator
+        )
+        db.session.add(ticket_log_service.to_db_entry(log_entry_a))
+        db.session.add(ticket_log_service.to_db_entry(log_entry_b))
+
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        raise
 
     return Ok(None)
 

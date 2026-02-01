@@ -35,3 +35,7 @@ __pycache__
 messages.pot
 
 secret_key.txt
+
+# local planning/agent notes
+/AGENTS.md
+/PLANS.md

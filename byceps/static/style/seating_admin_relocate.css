@@ -1,0 +1,79 @@
+.seat-with-tooltip.is-relocate-search-hidden {
+  opacity: 0.25;
+}
+
+.seat-with-tooltip.is-relocate-search-match .seat {
+  box-shadow: 0 0 0 1px #111111, 0 0 0 3px #88cc88;
+}
+
+.seat-with-tooltip.is-relocate-source .seat {
+  box-shadow: 0 0 0 1px #111111, 0 0 0 3px #04aff4, 0 0 0 5px #ffffff;
+}
+
+.seat-with-tooltip.is-relocate-target .seat {
+  box-shadow: 0 0 0 1px #111111, 0 0 0 3px #eecc00, 0 0 0 5px #ffffff;
+}
+
+.seating-relocate-panel .form-control:focus-visible,
+.seating-relocate-panel .button:focus-visible,
+.relocate-modal .button:focus-visible {
+  outline: 2px solid #111111;
+  outline-offset: 2px;
+}
+
+.seating-relocate-panel .column--grow {
+  min-width: 0;
+}
+
+#relocate-search-input {
+  flex: 1 1 12rem;
+  min-width: 12rem;
+}
+
+.relocate-info__ticket {
+  color: var(--dimmed-color);
+  font-size: 0.75rem;
+  margin-top: 0.1rem;
+  overflow-wrap: anywhere;
+}
+
+.relocate-modal {
+  display: none;
+  inset: 0;
+  padding: 1.5rem;
+  position: fixed;
+  z-index: 1000;
+}
+
+.relocate-modal.is-open {
+  align-items: center;
+  display: flex;
+  justify-content: center;
+}
+
+.relocate-modal__backdrop {
+  background-color: rgba(0, 0, 0, 0.6);
+  inset: 0;
+  position: absolute;
+}
+
+.relocate-modal__dialog {
+  max-width: 32rem;
+  position: relative;
+  width: 100%;
+  z-index: 1;
+}
+
+.relocate-modal__title {
+  margin-top: 0;
+}
+
+.relocate-modal__message {
+  margin-bottom: 0.75rem;
+}
+
+.relocate-modal__warning {
+  color: var(--color-warning);
+  font-weight: bold;
+  margin: 0 0 1rem 0;
+}

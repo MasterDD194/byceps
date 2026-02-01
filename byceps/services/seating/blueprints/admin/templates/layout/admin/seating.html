@@ -18,6 +18,11 @@
         id='areas',
         required_permission='seating.view')
       .add_item(
+        url_for('.relocate_index_for_party', party_id=party.id),
+        _('Teilnehmer umsetzen'),
+        id='relocate',
+        required_permission='seating.administrate')
+      .add_item(
         url_for('.seat_group_index', party_id=party.id),
         _('Groups'),
         id='seat_groups',

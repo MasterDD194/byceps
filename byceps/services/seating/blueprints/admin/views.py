@@ -10,7 +10,9 @@ from uuid import UUID
 
 from flask import abort, g, request
 from flask_babel import gettext, to_utc
+from sqlalchemy.exc import IntegrityError
 
+from byceps.database import db
 from byceps.services.party import party_service
 from byceps.services.seating import (
     seat_group_service,
@@ -22,13 +24,17 @@ from byceps.services.seating import (
 from byceps.services.seating.models import (
     SeatingArea,
     SeatingAreaID,
+    SeatID,
     SeatGroup,
     SeatGroupID,
     SeatReservationPrecondition,
 )
 from byceps.services.ticketing import (
+    errors as ticketing_errors,
     ticket_bundle_service,
     ticket_category_service,
+    ticket_seat_management_service,
+    ticket_service,
 )
 from byceps.services.ticketing.models.ticket import TicketBundleID
 from byceps.util.framework.blueprint import create_blueprint
@@ -220,6 +226,326 @@ def area_update(area_id):
     )
 
     return redirect_to('.area_view', area_id=area.id)
+
+
+# relocate
+
+
+@blueprint.get('/parties/<party_id>/relocate')
+@permission_required('seating.view')
+@permission_required('seating.administrate')
+@templated
+def relocate_index_for_party(party_id):
+    """List seating areas for that party to relocate participants."""
+    party = _get_party_or_404(party_id)
+
+    areas = seating_area_service.get_areas_for_party(party.id)
+
+    return {
+        'party': party,
+        'areas': areas,
+        'current_tab': 'relocate',
+    }
+
+
+@blueprint.get('/areas/<area_id>/relocate')
+@permission_required('seating.view')
+@permission_required('seating.administrate')
+@templated
+def relocate_area(area_id):
+    """Show relocate view for seating area."""
+    area = _get_area_or_404(area_id)
+
+    party = party_service.get_party(area.party_id)
+    seats = seat_service.get_area_seats(area.id)
+
+    return {
+        'party': party,
+        'area': area,
+        'seats': seats,
+        'current_tab': 'relocate',
+    }
+
+
+@blueprint.post('/areas/<area_id>/relocate')
+@permission_required('seating.view')
+@permission_required('seating.administrate')
+def relocate_area_move(area_id):
+    """Move a participant to a free seat in the area."""
+    area = _get_area_or_404(area_id)
+
+    def _redirect_with_error(message):
+        flash_error(message)
+        return redirect_to('.relocate_area', area_id=area.id)
+
+    invalid_request_message = gettext(
+        'Ungültige Angaben. Bitte neu auswählen.'
+    )
+    seat_status_changed_message = gettext(
+        'Sitzstatus hat sich geändert. Bitte neu auswählen.'
+    )
+    seat_occupied_message = gettext(
+        'Sitz ist inzwischen belegt. Bitte neu auswählen.'
+    )
+
+    def _get_ticket_category_title(ticket):
+        category = getattr(ticket, 'category', None)
+        return category.title if category else None
+
+    def _get_seat_category_title(seat):
+        category = ticket_category_service.find_category(seat.category_id)
+        return category.title if category else None
+
+    def _build_category_mismatch_message(ticket, seat):
+        ticket_category_title = _get_ticket_category_title(ticket)
+        seat_category_title = _get_seat_category_title(seat)
+
+        if ticket_category_title and seat_category_title:
+            return gettext(
+                'Ticket %(ticket_code)s (Kategorie %(ticket_category)s) passt nicht zu Sitz "%(seat_label)s" (Kategorie %(seat_category)s).',
+                ticket_code=ticket.code,
+                ticket_category=ticket_category_title,
+                seat_label=seat.label,
+                seat_category=seat_category_title,
+            )
+
+        return gettext(
+            'Ticket %(ticket_code)s und Sitz "%(seat_label)s" gehören zu unterschiedlichen Kategorien.',
+            ticket_code=ticket.code,
+            seat_label=seat.label,
+        )
+
+    mode = request.form.get('mode')
+    if mode == 'swap':
+        ticket_id_str = request.form.get('ticket_id')
+        target_ticket_id_str = request.form.get('target_ticket_id')
+        target_seat_id_str = request.form.get('target_seat_id')
+        source_seat_id_str = request.form.get('source_seat_id')
+
+        if (
+            not ticket_id_str
+            or not target_seat_id_str
+            or not source_seat_id_str
+        ):
+            return _redirect_with_error(gettext('Benötigte Angaben fehlen.'))
+
+        if not target_ticket_id_str:
+            return _redirect_with_error(
+                gettext('Zielticket fehlt. Bitte neu auswählen.')
+            )
+
+        try:
+            ticket_id = UUID(ticket_id_str)
+            target_ticket_id = UUID(target_ticket_id_str)
+            target_seat_id = SeatID(UUID(target_seat_id_str))
+            source_seat_id = SeatID(UUID(source_seat_id_str))
+        except ValueError:
+            return _redirect_with_error(invalid_request_message)
+
+        try:
+            source_seat = seat_service.get_seat(source_seat_id)
+            target_seat = seat_service.get_seat(target_seat_id)
+        except ValueError:
+            return _redirect_with_error(
+                gettext('Sitz wurde nicht gefunden.')
+            )
+
+        if (source_seat.area_id != area.id) or (
+            target_seat.area_id != area.id
+        ):
+            return _redirect_with_error(
+                gettext('Sitz gehört nicht zu diesem Bereich.')
+            )
+
+        source_ticket = ticket_service.find_ticket(ticket_id)
+        target_ticket = ticket_service.find_ticket(target_ticket_id)
+        if (source_ticket is None) or source_ticket.revoked:
+            return _redirect_with_error(
+                gettext('Ticket wurde nicht gefunden.')
+            )
+        if (target_ticket is None) or target_ticket.revoked:
+            return _redirect_with_error(
+                gettext('Zielticket wurde nicht gefunden.')
+            )
+
+        if (
+            (source_ticket.party_id != area.party_id)
+            or (target_ticket.party_id != area.party_id)
+        ):
+            return _redirect_with_error(
+                gettext('Ticket gehört nicht zu dieser Party.')
+            )
+
+        if source_ticket.occupied_seat_id != source_seat_id:
+            return _redirect_with_error(seat_status_changed_message)
+
+        target_seat_occupier = ticket_service.find_ticket_occupying_seat(
+            target_seat.id
+        )
+        if target_seat_occupier is None:
+            return _redirect_with_error(
+                gettext('Zielsitz ist inzwischen frei. Bitte neu auswählen.')
+            )
+        if target_seat_occupier.id != target_ticket.id:
+            return _redirect_with_error(seat_status_changed_message)
+
+        if source_ticket.category_id != target_seat.category_id:
+            return _redirect_with_error(
+                _build_category_mismatch_message(source_ticket, target_seat)
+            )
+
+        if target_ticket.category_id != source_seat.category_id:
+            return _redirect_with_error(
+                _build_category_mismatch_message(target_ticket, source_seat)
+            )
+
+        initiator = g.user
+
+        try:
+            swap_result = ticket_seat_management_service.swap_seats(
+                source_ticket.id, target_ticket.id, initiator
+            )
+        except IntegrityError:
+            return _redirect_with_error(seat_status_changed_message)
+
+        if swap_result.is_err():
+            err = swap_result.unwrap_err()
+            if isinstance(
+                err, ticketing_errors.SeatChangeDeniedForBundledTicketError
+            ):
+                return _redirect_with_error(
+                    gettext(
+                        'Mindestens eines der Tickets gehört zu einem Bundle und kann nicht einzeln umgesetzt werden.'
+                    )
+                )
+            elif isinstance(
+                err, ticketing_errors.SeatChangeDeniedForGroupSeatError
+            ):
+                return _redirect_with_error(
+                    gettext(
+                        'Mindestens einer der Sitze gehört zu einer Gruppe und kann nicht einzeln umgesetzt werden.'
+                    )
+                )
+            elif isinstance(err, ticketing_errors.TicketCategoryMismatchError):
+                mismatch_message = None
+                if source_ticket.category_id != target_seat.category_id:
+                    mismatch_message = _build_category_mismatch_message(
+                        source_ticket, target_seat
+                    )
+                elif target_ticket.category_id != source_seat.category_id:
+                    mismatch_message = _build_category_mismatch_message(
+                        target_ticket, source_seat
+                    )
+
+                if mismatch_message is None:
+                    mismatch_message = gettext(
+                        'Tickets und Sitze gehören zu unterschiedlichen Kategorien.'
+                    )
+
+                return _redirect_with_error(mismatch_message)
+            else:
+                return _redirect_with_error(
+                    gettext('Ein unerwarteter Fehler ist aufgetreten.')
+                )
+
+        flash_success(gettext('Plätze wurden getauscht.'))
+
+        return redirect_to('.relocate_area', area_id=area.id)
+
+    if mode != 'move':
+        return _redirect_with_error(gettext('Aktion ist ungültig.'))
+
+    ticket_id_str = request.form.get('ticket_id')
+    target_seat_id_str = request.form.get('target_seat_id')
+    source_seat_id_str = request.form.get('source_seat_id')
+
+    if not ticket_id_str or not target_seat_id_str:
+        return _redirect_with_error(gettext('Benötigte Angaben fehlen.'))
+
+    try:
+        ticket_id = UUID(ticket_id_str)
+        target_seat_id = SeatID(UUID(target_seat_id_str))
+        source_seat_id = (
+            SeatID(UUID(source_seat_id_str))
+            if source_seat_id_str
+            else None
+        )
+    except ValueError:
+        return _redirect_with_error(invalid_request_message)
+
+    try:
+        seat = seat_service.get_seat(target_seat_id)
+    except ValueError:
+        return _redirect_with_error(gettext('Sitz wurde nicht gefunden.'))
+
+    if seat.area_id != area.id:
+        return _redirect_with_error(
+            gettext('Sitz gehört nicht zu diesem Bereich.')
+        )
+
+    ticket = ticket_service.find_ticket(ticket_id)
+    if (ticket is None) or ticket.revoked:
+        return _redirect_with_error(gettext('Ticket wurde nicht gefunden.'))
+
+    if ticket.party_id != area.party_id:
+        return _redirect_with_error(
+            gettext('Ticket gehört nicht zu dieser Party.')
+        )
+
+    if source_seat_id is not None:
+        if ticket.occupied_seat_id != source_seat_id:
+            return _redirect_with_error(seat_status_changed_message)
+
+    if ticket.occupied_seat_id is None:
+        return _redirect_with_error(seat_status_changed_message)
+
+    if ticket_service.find_ticket_occupying_seat(seat.id) is not None:
+        return _redirect_with_error(seat_occupied_message)
+
+    initiator = g.user
+
+    try:
+        occupy_seat_result = ticket_seat_management_service.occupy_seat(
+            ticket.id, seat.id, initiator
+        )
+    except ValueError:
+        return _redirect_with_error(gettext('Sitz wurde nicht gefunden.'))
+    except IntegrityError:
+        db.session.rollback()
+        return _redirect_with_error(seat_occupied_message)
+
+    if occupy_seat_result.is_err():
+        err = occupy_seat_result.unwrap_err()
+        if isinstance(
+            err, ticketing_errors.SeatChangeDeniedForBundledTicketError
+        ):
+            return _redirect_with_error(
+                gettext(
+                    'Ticket %(ticket_code)s gehört zu einem Bundle und kann nicht einzeln umgesetzt werden.',
+                    ticket_code=ticket.code,
+                )
+            )
+        elif isinstance(
+            err, ticketing_errors.SeatChangeDeniedForGroupSeatError
+        ):
+            return _redirect_with_error(
+                gettext(
+                    'Sitz "%(seat_label)s" gehört zu einer Gruppe und kann nicht einzeln umgesetzt werden.',
+                    seat_label=seat.label,
+                )
+            )
+        elif isinstance(err, ticketing_errors.TicketCategoryMismatchError):
+            return _redirect_with_error(
+                _build_category_mismatch_message(ticket, seat)
+            )
+        else:
+            return _redirect_with_error(
+                gettext('Ein unerwarteter Fehler ist aufgetreten.')
+            )
+
+    flash_success(gettext('Teilnehmer wurde umgesetzt.'))
+
+    return redirect_to('.relocate_area', area_id=area.id)
 
 
 # seat group
