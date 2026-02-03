@@ -492,12 +492,22 @@ def relocate_area_move(area_id):
             gettext('Ticket gehört nicht zu dieser Party.')
         )
 
+    if ticket.occupied_seat_id is None:
+        return _redirect_with_error(seat_status_changed_message)
+
+    try:
+        occupied_seat = seat_service.get_seat(ticket.occupied_seat_id)
+    except ValueError:
+        return _redirect_with_error(seat_status_changed_message)
+
+    if occupied_seat.area_id != area.id:
+        return _redirect_with_error(
+            gettext('Sitz gehört nicht zu diesem Bereich.')
+        )
+
     if source_seat_id is not None:
         if ticket.occupied_seat_id != source_seat_id:
             return _redirect_with_error(seat_status_changed_message)
-
-    if ticket.occupied_seat_id is None:
-        return _redirect_with_error(seat_status_changed_message)
 
     if ticket_service.find_ticket_occupying_seat(seat.id) is not None:
         return _redirect_with_error(seat_occupied_message)
