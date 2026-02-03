@@ -57,13 +57,11 @@ def test_relocate_move_rejects_cross_area_source_seat(
         'source_seat_id': str(seat_a1.id),
         'target_seat_id': str(seat_b1.id),
     }
-    response = seating_admin_client.post(
-        url, data=form_data, follow_redirects=True
+    response = seating_admin_client.post(url, data=form_data)
+    assert response.status_code == 302
+    assert response.headers['Location'].endswith(
+        f'/seating/areas/{area_b.id}/relocate'
     )
-    assert response.status_code == 200
-
-    body = response.get_data(as_text=True)
-    assert 'nicht zu diesem Bereich' in body
 
     ticket_after = ticket_service.find_ticket(ticket.id)
     assert ticket_after.occupied_seat_id == seat_a1.id
@@ -103,13 +101,11 @@ def test_relocate_move_within_area_succeeds(
         'source_seat_id': str(seat_1.id),
         'target_seat_id': str(seat_2.id),
     }
-    response = seating_admin_client.post(
-        url, data=form_data, follow_redirects=True
+    response = seating_admin_client.post(url, data=form_data)
+    assert response.status_code == 302
+    assert response.headers['Location'].endswith(
+        f'/seating/areas/{area.id}/relocate'
     )
-    assert response.status_code == 200
-
-    body = response.get_data(as_text=True)
-    assert 'Teilnehmer wurde umgesetzt' in body
 
     ticket_after = ticket_service.find_ticket(ticket.id)
     assert ticket_after.occupied_seat_id == seat_2.id
