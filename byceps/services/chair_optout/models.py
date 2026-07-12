@@ -2,7 +2,7 @@
 byceps.services.chair_optout.models
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:Copyright: 2014-2026 Jochen Kupperschmidt
+:Copyright: 2026 Y0GI
 :License: Revised BSD (see `LICENSE` file for details)
 """
 
@@ -31,8 +31,18 @@ class PartyTicketChairOptout:
 
 @dataclass(frozen=True, kw_only=True)
 class ChairOptoutReportEntry:
+    ticket_id: TicketID
     full_name: str | None
     screen_name: str | None
     ticket_code: str
     seat_label: str | None
     has_seat: bool
+    brings_own_chair: bool | None
+
+
+@dataclass(frozen=True, kw_only=True)
+class ChairInformationSummary:
+    brings_own_chair: int
+    needs_provided_chair: int
+    not_specified: int
+    no_seat: int
