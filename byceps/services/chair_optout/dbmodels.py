@@ -2,7 +2,6 @@
 byceps.services.chair_optout.dbmodels
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:Copyright: 2026 Y0GI
 :License: Revised BSD (see `LICENSE` file for details)
 """
 

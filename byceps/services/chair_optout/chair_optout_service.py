@@ -2,17 +2,18 @@
 byceps.services.chair_optout.chair_optout_service
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:Copyright: 2026 Y0GI
 :License: Revised BSD (see `LICENSE` file for details)
 """
 
 from collections.abc import Sequence
 from datetime import datetime
+from typing import cast
 
 from sqlalchemy import select
 
 from byceps.database import db
 from byceps.services.party.models import PartyID
+from byceps.services.seating.dbmodels.seat import DbSeat
 from byceps.services.ticketing.dbmodels.ticket import DbTicket
 from byceps.services.ticketing.models.ticket import TicketID
 from byceps.services.user.dbmodels import DbUser
@@ -208,7 +209,7 @@ def _get_eligible_tickets_for_party(party_id: PartyID) -> list[DbTicket]:
             .filter_by(party_id=party_id, revoked=False)
             .filter(DbTicket.used_by_id.is_not(None))
             .options(
-                db.joinedload(DbTicket.occupied_seat),
+                db.joinedload(DbTicket.occupied_seat).joinedload(DbSeat.area),
                 db.joinedload(DbTicket.used_by).joinedload(DbUser.detail),
             )
             .order_by(DbTicket.code)
@@ -234,16 +235,20 @@ def _db_entity_to_optout(
 def _build_report_entry(
     db_ticket: DbTicket, optout: PartyTicketChairOptout | None
 ) -> ChairOptoutReportEntry:
-    user = db_ticket.used_by
+    user = cast(DbUser, db_ticket.used_by)
+    seat = db_ticket.occupied_seat
     full_name = (
         user.detail.full_name if (user is not None and user.detail) else None
     )
 
     return ChairOptoutReportEntry(
         ticket_id=db_ticket.id,
+        user_id=user.id,
         full_name=full_name,
-        screen_name=user.screen_name if user is not None else None,
+        screen_name=user.screen_name,
         ticket_code=db_ticket.code,
+        seat_id=seat.id if seat is not None else None,
+        seat_area_slug=seat.area.slug if seat is not None else None,
         seat_label=resolve_seat_label_for_ticket(db_ticket),
         has_seat=db_ticket.occupied_seat is not None,
         brings_own_chair=(

@@ -2,7 +2,6 @@
 byceps.services.chair_optout.models
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:Copyright: 2026 Y0GI
 :License: Revised BSD (see `LICENSE` file for details)
 """
 
@@ -12,6 +11,7 @@ from typing import NewType
 from uuid import UUID
 
 from byceps.services.party.models import PartyID
+from byceps.services.seating.models import SeatID
 from byceps.services.ticketing.models.ticket import TicketID
 from byceps.services.user.models import UserID
 
@@ -32,9 +32,12 @@ class PartyTicketChairOptout:
 @dataclass(frozen=True, kw_only=True)
 class ChairOptoutReportEntry:
     ticket_id: TicketID
+    user_id: UserID
     full_name: str | None
     screen_name: str | None
     ticket_code: str
+    seat_id: SeatID | None
+    seat_area_slug: str | None
     seat_label: str | None
     has_seat: bool
     brings_own_chair: bool | None
