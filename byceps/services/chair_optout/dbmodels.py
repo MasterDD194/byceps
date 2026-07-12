@@ -2,7 +2,7 @@
 byceps.services.chair_optout.dbmodels
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-:Copyright: 2014-2026 Jochen Kupperschmidt
+:Copyright: 2026 Y0GI
 :License: Revised BSD (see `LICENSE` file for details)
 """
 
@@ -19,7 +19,7 @@ from byceps.util.uuid import generate_uuid7
 from .models import ChairOptoutID
 
 
-class DbPartyTicketChairOptout(db.Model):
+class DbPartyTicketChairOptout(db.Model):  # type: ignore[name-defined]
     """The chair opt-out setting for a party ticket."""
 
     __tablename__ = 'party_ticket_chair_optouts'

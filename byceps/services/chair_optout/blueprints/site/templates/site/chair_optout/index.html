@@ -1,55 +1,44 @@
 {% extends 'layout/base.html' %}
-{% from 'macros/forms.html' import form_buttons, form_field_errors, form_form_errors %}
+{% from 'macros/forms.html' import form_field_radio, form_form_errors %}
+{% from 'macros/icons.html' import render_icon %}
 {% set current_page = 'chair_optout' %}
-{% set page_title = _('Eigener Stuhl') %}
+{% set page_title = _('Chair information') %}
 
 {% block body %}
 
   <h1 class="title">{{ page_title }}</h1>
 
-  <div class="block">
-    {{ _('Wähle die Tickets aus, für die du deinen eigenen Stuhl mitbringst.') }}
-  </div>
+  {%- for item in ticket_information|sort(attribute='ticket.code') %}
+  <section class="box block" id="ticket-{{ item.ticket.id }}">
+    <h2 class="title">
+      {{ _('Ticket') }} <span class="monospace">{{ item.ticket.code }}</span>
+      ·
+      {%- if item.ticket.occupied_seat %}
+        {{ _('Seat') }} {{ item.seat_label|fallback(_('unnamed')) }}
+      {%- else %}
+        {{ _('no seat') }}
+      {%- endif %}
+    </h2>
 
-  <form method="post">
-    {{ form_form_errors(form) }}
-    <table class="itemlist is-vcentered is-wide">
-      <thead>
-        <tr>
-          <th>{{ _('Ticketnummer') }}</th>
-          <th>{{ _('Sitzplatz') }}</th>
-          <th class="centered">{{ _('Eigenen Stuhl mitbringen') }}</th>
-        </tr>
-      </thead>
-      <tbody>
-        {%- for ticket in ticket_optouts|sort(attribute='code') %}
-        <tr>
-          <td><span class="monospace">{{ ticket.code }}</span></td>
-          <td>
-            {%- if ticket.has_seat -%}
-              {{ ticket.seat_label|fallback(_('ohne Bezeichnung')) }}
-            {%- else -%}
-              {{ _('kein Sitzplatz')|dim }}
-            {%- endif -%}
-          </td>
-          <td class="centered">
-            <input
-              type="checkbox"
-              name="{{ form.ticket_ids.name }}"
-              value="{{ ticket.id }}"
-              aria-label="{{ _('Eigenen Stuhl mitbringen für Ticket %(ticket_code)s', ticket_code=ticket.code) }}"
-              {%- if ticket.brings_own_chair %} checked{% endif -%}
-              {%- if not ticket.has_seat %} disabled{% endif -%}
-            >
-          </td>
-        </tr>
-        {%- endfor %}
-      </tbody>
-    </table>
+    <p>
+      <strong>{{ _('Chair information') }}:</strong>
+      {%- if item.brings_own_chair is sameas true %}
+        {{ _('Brings own chair') }}
+      {%- elif item.brings_own_chair is sameas false %}
+        {{ _('Needs a provided chair') }}
+      {%- else %}
+        {{ _('Not specified yet') }}
+      {%- endif %}
+    </p>
 
-    {{ form_field_errors(form.ticket_ids) }}
-
-    {{ form_buttons(_('Speichern')) }}
-  </form>
+    <form action="{{ url_for('.update', ticket_id=item.ticket.id) }}" method="post">
+      {{ form_form_errors(item.form) }}
+      {{ form_field_radio(item.form.choice) }}
+      <div class="button-row">
+        <button class="button color-success" type="submit">{{ render_icon('save') }} <span>{{ _('Save') }}</span></button>
+      </div>
+    </form>
+  </section>
+  {%- endfor %}
 
 {% endblock %}

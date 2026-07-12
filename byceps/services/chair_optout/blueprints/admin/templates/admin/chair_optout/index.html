@@ -1,24 +1,44 @@
 {% extends 'layout/admin/base.html' %}
 {% from 'macros/icons.html' import render_icon %}
-{% set current_page = 'chair_optout_admin' %}
+{% from 'macros/stats.html' import render_bigstats_item %}
+{% set current_page = 'more_admin_party' %}
 {% set current_page_party = party %}
-{% set page_title = [_('Eigener Stuhl'), party.title] %}
+{% set page_title = [_('Participant chair information'), party.title] %}
+
+{% macro render_area(area, seats, own_chair_ticket_ids) -%}
+  <div class="area" style="background-color: #111111; background-image: url(/data/parties/{{ area.party_id }}/seating/areas/{{ area.image_filename }}); height: {{ area.image_height }}px; width: {{ area.image_width }}px;">
+    {%- for seat in seats|sort(attribute='coord_y')|sort(attribute='coord_x') %}
+      {%- set brings_own_chair = seat.occupied and seat.occupied_by_ticket_id in own_chair_ticket_ids %}
+      <div id="seat-{{ seat.id }}" class="seat-with-tooltip" style="left: {{ seat.coord_x }}px; top: {{ seat.coord_y }}px;"{% if brings_own_chair %} title="{{ seat.label|fallback(_('unnamed')) }} · {{ _('Brings own chair') }}"{% endif %}>
+        <div class="seat{% if seat.type_ %} seat-type--{{ seat.type_ }}{% endif %}{% if seat.occupied %} seat--occupied{% endif %}{% if brings_own_chair %} seat--own-chair{% endif %}"{% if seat.rotation %} style="transform: rotate({{ seat.rotation }}deg);"{% endif %}></div>
+      </div>
+    {%- endfor %}
+  </div>
+{%- endmacro %}
+
+{% block head %}
+    <link rel="stylesheet" href="{{ url_for('static', filename='style/seating.css') }}">
+    <link rel="stylesheet" href="{{ url_for('.static', filename='style/chair_optout.css') }}">
+{%- endblock %}
 
 {% block body %}
 
   <div class="block row row--space-between">
     <div>
-      <h1 class="title">{{ _('Eigener Stuhl') }}</h1>
+      <h1 class="title">{{ _('Participant chair information') }}</h1>
     </div>
     <div>
       <div class="button-row is-right-aligned">
-        {%- if report_entries %}
         <a class="button" href="{{ url_for('.export_as_csv', party_id=party.id) }}" download="chair_optout_{{ party.id }}.csv">{{ render_icon('download') }} <span>{{ _('Export') }} (CSV)</span></a>
-        {%- else %}
-        <button class="button" disabled>{{ render_icon('download') }} <span>{{ _('Export') }} (CSV)</span></button>
-        {%- endif %}
       </div>
     </div>
+  </div>
+
+  <div class="block row row--equal-sized-centered-columns row--space-around row--wrap bigstats">
+    {{ render_bigstats_item(summary.brings_own_chair, _('Brings own chair')) }}
+    {{ render_bigstats_item(summary.needs_provided_chair, _('Needs a provided chair')) }}
+    {{ render_bigstats_item(summary.not_specified, _('Not specified yet')) }}
+    {{ render_bigstats_item(summary.no_seat, _('no seat')) }}
   </div>
 
   {%- if report_entries %}
@@ -27,8 +47,9 @@
       <tr>
         <th>{{ _('Name') }}</th>
         <th>{{ _('Nickname') }}</th>
-        <th>{{ _('Ticketnummer') }}</th>
-        <th>{{ _('Sitzplatz') }}</th>
+        <th>{{ _('Ticket number') }}</th>
+        <th>{{ _('Seat') }}</th>
+        <th>{{ _('Chair information') }}</th>
       </tr>
     </thead>
     <tbody>
@@ -39,9 +60,18 @@
         <td><span class="monospace">{{ entry.ticket_code }}</span></td>
         <td>
           {%- if entry.has_seat -%}
-            {{ entry.seat_label|fallback(_('ohne Bezeichnung')) }}
+            {{ entry.seat_label|fallback(_('unnamed')) }}
           {%- else -%}
-            {{ _('kein Sitzplatz')|dim }}
+            {{ _('no seat')|dim }}
+          {%- endif -%}
+        </td>
+        <td>
+          {%- if entry.brings_own_chair is sameas true -%}
+            {{ _('Brings own chair') }}
+          {%- elif entry.brings_own_chair is sameas false -%}
+            {{ _('Needs a provided chair') }}
+          {%- else -%}
+            {{ _('Not specified yet') }}
           {%- endif -%}
         </td>
       </tr>
@@ -49,7 +79,14 @@
     </tbody>
   </table>
   {%- else %}
-  <div class="box no-data-message">{{ _('Keine Einträge') }}</div>
+  <div class="box no-data-message">{{ _('No entries') }}</div>
   {%- endif %}
+
+  {%- for area, seats in areas_with_seats|sort(attribute='0.title') %}
+  <section class="block">
+    <h2 class="title">{{ area.title }}</h2>
+    {{ render_area(area, seats, own_chair_ticket_ids) }}
+  </section>
+  {%- endfor %}
 
 {% endblock %}

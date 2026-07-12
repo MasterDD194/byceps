@@ -1,83 +1,50 @@
-# Chair Opt-out (Bring Your Own Chair)
+# Participant chair information
 
-## Purpose
-- Users can mark individual **party tickets** as “bring own chair”.
-- Admin report/CSV lists **only tickets with** `brings_own_chair = true`.
+This service lets the current participant of each party ticket state whether
+they will bring their own chair or need a provided chair.
 
----
+## Participant rules
 
-## Structure
+- A chair answer belongs to the ticket's current `used_by` participant.
+- Ticket ownership and seat or user management rights do not grant access.
+- Tickets without seats can be answered.
+- A seat change preserves the answer.
+- A ticket-user change makes the previous answer stale. The new participant
+  starts with no valid answer and replaces the ticket-level record when they
+  submit one.
 
-### Service
-- `byceps/services/chair_optout/`
-  - service code, DB models, permissions
+## Administration
 
-### Blueprints
-- Site blueprint: `byceps/services/chair_optout/blueprints/site` (name: `chair_optout`)
-- Admin blueprint: `byceps/services/chair_optout/blueprints/admin` (name: `chair_optout_admin`)
+The party-specific `More` page links to `Seat management`. Its first tool is
+`Participant chair information`, which provides summary counts, a participant
+table, CSV export, and graphical seating plans.
 
-### Templates
-- Site templates:
-  - `byceps/services/chair_optout/blueprints/site/templates/site/chair_optout/*.html`
-- Admin templates:
-  - `byceps/services/chair_optout/blueprints/admin/templates/admin/chair_optout/*.html`
+The overview and export use the existing `seating.view` permission. There is no
+Chair-specific permission or role.
 
-### Registration / Integration
-- Registered in:
-  - `byceps/blueprints/site.py` → module `services.chair_optout.blueprints.site`
-  - `byceps/blueprints/admin.py` → module `services.chair_optout.blueprints.admin`
-- Entry points are exposed by the routes below; links can be added via templates/navigation as needed.
+The three answer-state summary values partition all non-revoked party tickets
+with a current participant. `No seat` is an additional count over the same
+tickets, so a ticket without a seat is also counted in exactly one answer state.
 
----
+## Persistence
 
-## URLs
-- User: `GET/POST /party/<party_id>/chair-optout`
-- Admin: `GET /admin/party/<party_id>/chair-optout`
-- Admin CSV: `GET /admin/party/<party_id>/chair-optout/export.csv`
+Answers are stored in `party_ticket_chair_optouts`, with one row per party and
+ticket. The row stores the participant ID that supplied the current answer.
+Reads treat a row as valid only while its `user_id` matches the ticket's current
+`used_by_id`.
 
----
+The three states are:
 
-## Report / CSV columns
-- `Name | Nickname | Ticketnummer | Sitzplatz-Label`
+- no valid row for the current participant: not specified yet;
+- `brings_own_chair = true`: brings own chair;
+- `brings_own_chair = false`: needs a provided chair.
 
----
+Seat labels and seating-plan positions are resolved from the current Seating
+data and are not duplicated in the Chair table.
 
-## Seat label resolution
-- Seat label is derived live from the current seat assignment (no seat label is stored in the opt-out table).
-- If a ticket has no seat, the seat label is empty/none.
+## Validation
 
----
-
-## Permissions
-- `chair_optout.view`
-
----
-
-## Database
-- New table: `party_ticket_chair_optouts`
-- Fields: `id (UUID PK)`, `party_id`, `ticket_id`, `user_id`, `brings_own_chair`, `updated_at`
-- Unique constraint: `(party_id, ticket_id)`
-
-Database setup:
-`initialize-database` importiert nur Default-Rollen; Custom-Rollen müssen
-separat per `import-roles -f` importiert werden.
-
-Fresh install (Docker):
-1. `uv run byceps initialize-database`
-2. `uv run byceps import-roles -f scripts/data/verplant_roles.toml`
-3. `uv run byceps create-superuser`
-
-Upgrade/existing DB:
-1. `uv run byceps create-database-tables`
-2. `uv run byceps import-roles -f scripts/data/verplant_roles.toml`
-3. Hinweis: Rolle anschließend einem Orga-User zuweisen (UI), falls nötig.
-
----
-
-## Tests
-Install test dependencies:
-- `uv sync --frozen --group test`
-
-Run tests:
-- Unit tests: `uv run pytest tests/unit`
-- Full suite: `uv run pytest`
+Use the repository commands documented in the root `justfile`, `pyproject.toml`,
+and CI workflow. Chair tests are located below
+`tests/unit/blueprints/chair_optout` and
+`tests/unit/services/chair_optout`.
