@@ -1,5 +1,4 @@
 """
-:Copyright: 2026 Y0GI
 :License: Revised BSD (see `LICENSE` file for details)
 """
 
@@ -220,20 +219,32 @@ def test_report_includes_all_answer_states_and_missing_seat(monkeypatch):
     second_ticket_id = TicketID(generate_uuid())
     third_ticket_id = TicketID(generate_uuid())
     user = SimpleNamespace(
-        screen_name='alice', detail=SimpleNamespace(full_name='Alice Example')
+        id=first_user_id,
+        screen_name='alice',
+        detail=SimpleNamespace(full_name='Alice Example'),
+    )
+    first_seat = SimpleNamespace(
+        id=generate_uuid(),
+        label='A-1',
+        area=SimpleNamespace(slug='first-area'),
+    )
+    second_seat = SimpleNamespace(
+        id=generate_uuid(),
+        label='A-2',
+        area=SimpleNamespace(slug='second-area'),
     )
     tickets = [
         SimpleNamespace(
             id=first_ticket_id,
             code='T-1',
             used_by=user,
-            occupied_seat=SimpleNamespace(label='A-1'),
+            occupied_seat=first_seat,
         ),
         SimpleNamespace(
             id=second_ticket_id,
             code='T-2',
             used_by=user,
-            occupied_seat=SimpleNamespace(label='A-2'),
+            occupied_seat=second_seat,
         ),
         SimpleNamespace(
             id=third_ticket_id,
@@ -260,6 +271,9 @@ def test_report_includes_all_answer_states_and_missing_seat(monkeypatch):
 
     assert [entry.brings_own_chair for entry in entries] == [True, False, None]
     assert entries[2].has_seat is False
+    assert entries[0].user_id == first_user_id
+    assert entries[0].seat_id == first_seat.id
+    assert entries[0].seat_area_slug == 'first-area'
     assert summary.brings_own_chair == 1
     assert summary.needs_provided_chair == 1
     assert summary.not_specified == 1

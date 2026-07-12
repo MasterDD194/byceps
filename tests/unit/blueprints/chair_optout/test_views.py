@@ -1,5 +1,4 @@
 """
-:Copyright: 2026 Y0GI
 :License: Revised BSD (see `LICENSE` file for details)
 """
 
@@ -61,9 +60,12 @@ def _make_report_entry(
 ):
     return ChairOptoutReportEntry(
         ticket_id=generate_uuid(),
+        user_id=generate_uuid(),
         full_name='Alice Example',
         screen_name='alice',
         ticket_code=ticket_code,
+        seat_id=generate_uuid() if has_seat else None,
+        seat_area_slug='main' if has_seat else None,
         seat_label='A-1' if has_seat else None,
         has_seat=has_seat,
         brings_own_chair=brings_own_chair,
@@ -280,10 +282,12 @@ def test_admin_views_require_seating_view(app):
         with pytest.raises(Forbidden):
             admin_views.chair_information('party-1')
         with pytest.raises(Forbidden):
+            admin_views.chair_information_seating_plan('party-1')
+        with pytest.raises(Forbidden):
             admin_views.export_as_csv('party-1')
 
 
-def test_admin_overview_uses_all_areas_and_valid_own_chair_ids(
+def test_graphical_overview_uses_all_areas_and_chair_information(
     app, monkeypatch
 ):
     entries = [
@@ -325,13 +329,122 @@ def test_admin_overview_uses_all_areas_and_valid_own_chair_ids(
             lambda area_id: [f'seat-{area_id}'],
         )
 
-        context = _unwrap(admin_views.chair_information)('party-1')
+        context = _unwrap(admin_views.chair_information_seating_plan)('party-1')
 
     assert context['areas_with_seats'] == [
         (areas[0], ['seat-area-1']),
         (areas[1], ['seat-area-2']),
     ]
-    assert context['own_chair_ticket_ids'] == {entries[0].ticket_id}
+    assert context['chair_information_by_ticket_id'] == {
+        entries[0].ticket_id: True,
+        entries[1].ticket_id: False,
+        entries[2].ticket_id: None,
+    }
+
+
+@pytest.mark.parametrize(
+    ('selected_filter', 'expected_codes'),
+    [
+        ('all', ['T-1', 'T-2', 'T-3', 'T-4']),
+        ('own_chair', ['T-1', 'T-4']),
+        ('provided_chair', ['T-2']),
+        ('not_specified', ['T-3']),
+        ('no_seat', ['T-3', 'T-4']),
+    ],
+)
+def test_participant_list_filters_entries(
+    app, monkeypatch, selected_filter, expected_codes
+):
+    entries = [
+        _make_report_entry('T-1', True),
+        _make_report_entry('T-2', False),
+        _make_report_entry('T-3', None, has_seat=False),
+        _make_report_entry('T-4', True, has_seat=False),
+    ]
+    summary = ChairInformationSummary(
+        brings_own_chair=2,
+        needs_provided_chair=1,
+        not_specified=1,
+        no_seat=2,
+    )
+
+    with app.test_request_context(f'/?filter={selected_filter}'):
+        monkeypatch.setattr(
+            admin_views.party_service,
+            'find_party',
+            lambda *_: SimpleNamespace(id='party-1', brand_id='brand-1'),
+        )
+        monkeypatch.setattr(
+            admin_views.chair_optout_service,
+            'get_report_entries_for_party',
+            lambda *_: entries,
+        )
+        monkeypatch.setattr(
+            admin_views.chair_optout_service,
+            'summarize_report_entries',
+            lambda *_: summary,
+        )
+        monkeypatch.setattr(
+            admin_views.site_service,
+            'get_current_sites',
+            lambda *_: [
+                SimpleNamespace(
+                    party_id='party-1', server_name='www.example.test'
+                )
+            ],
+        )
+
+        context = _unwrap(admin_views.chair_information)('party-1')
+
+    assert context['selected_filter'] == selected_filter
+    assert [entry.ticket_code for entry in context['report_entries']] == (
+        expected_codes
+    )
+    assert context['summary'] == summary
+
+
+def test_participant_list_is_default_and_builds_seat_deep_link(
+    app, monkeypatch
+):
+    entry = _make_report_entry('T-1', True)
+
+    with app.test_request_context('/'):
+        monkeypatch.setattr(
+            admin_views.party_service,
+            'find_party',
+            lambda *_: SimpleNamespace(id='party-1', brand_id='brand-1'),
+        )
+        monkeypatch.setattr(
+            admin_views.chair_optout_service,
+            'get_report_entries_for_party',
+            lambda *_: [entry],
+        )
+        monkeypatch.setattr(
+            admin_views.chair_optout_service,
+            'summarize_report_entries',
+            lambda *_: ChairInformationSummary(
+                brings_own_chair=1,
+                needs_provided_chair=0,
+                not_specified=0,
+                no_seat=0,
+            ),
+        )
+        monkeypatch.setattr(
+            admin_views.site_service,
+            'get_current_sites',
+            lambda *_: [
+                SimpleNamespace(
+                    party_id='party-1', server_name='www.example.test'
+                )
+            ],
+        )
+
+        context = _unwrap(admin_views.chair_information)('party-1')
+
+    assert context['selected_filter'] == 'all'
+    assert context['seat_urls_by_ticket_id'][entry.ticket_id] == (
+        f'https://www.example.test/seating/areas/main#seat-{entry.seat_id}'
+    )
 
 
 def test_admin_export_contains_all_states_and_ticket_without_seat(

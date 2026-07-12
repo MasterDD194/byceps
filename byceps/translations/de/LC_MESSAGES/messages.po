@@ -10106,3 +10106,19 @@ msgstr "Ticketnummer"
 #: byceps/services/chair_optout/blueprints/admin/views.py:75
 msgid "Seat label"
 msgstr "Sitzplatzbezeichnung"
+
+#: byceps/services/chair_optout/blueprints/admin/templates/macros/admin/chair_optout.html:4
+msgid "Participant list"
+msgstr "Teilnehmerliste"
+
+#: byceps/services/chair_optout/blueprints/admin/templates/macros/admin/chair_optout.html:5
+msgid "Graphical seating plan"
+msgstr "Grafischer Sitzplan"
+
+#: byceps/services/chair_optout/blueprints/admin/templates/admin/chair_optout/index.html:38
+msgid "All participants"
+msgstr "Alle Teilnehmer"
+
+#: byceps/services/chair_optout/blueprints/admin/templates/admin/chair_optout/seating_plan.html:45
+msgid "Green outline and dot: Brings own chair"
+msgstr "Grüne Umrandung und Punkt: Bringt eigenen Stuhl mit"
