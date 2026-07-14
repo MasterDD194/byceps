@@ -1,0 +1,44 @@
+{% extends 'layout/admin/base.html' %}
+{% from 'macros/admin.html' import render_extra_in_heading %}
+{% set current_page = 'seating_management_admin' %}
+{% set current_page_party = party %}
+{% set page_title = [_('Seat management'), party.title] %}
+
+{% block body %}
+
+  <h1 class="title">{{ _('Seat management') }}</h1>
+
+  <p>{{ _('Select a seating area to move or swap occupants and to block or unblock individual seats.') }}</p>
+
+  <h2>{{ _('Areas') }} {{ render_extra_in_heading(areas|length) }}</h2>
+
+  {%- if areas %}
+  <table class="itemlist is-vcentered is-wide">
+    <thead>
+      <tr>
+        <th>{{ _('Title') }}</th>
+        <th>{{ _('Background image') }}</th>
+        <th>{{ _('Dimensions') }}</th>
+      </tr>
+    </thead>
+    <tbody>
+      {%- for area in areas %}
+      <tr>
+        <td><a href="{{ url_for('.view_area', area_id=area.id) }}"><strong>{{ area.title }}</strong></a></td>
+        <td>{{ area.image_filename or _('not specified')|dim }}</td>
+        <td>
+          {%- if area.image_width and area.image_height %}
+          {{ area.image_width }} &times; {{ area.image_height }} {{ _('pixels') }}
+          {%- else %}
+          {{ _('not specified')|dim }}
+          {%- endif %}
+        </td>
+      </tr>
+      {%- endfor %}
+    </tbody>
+  </table>
+  {%- else %}
+  <div class="box no-data-message">{{ _('No areas exist.') }}</div>
+  {%- endif %}
+
+{%- endblock %}

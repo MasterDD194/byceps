@@ -2165,14 +2165,6 @@ form .form-form-errors, form .invalid {
 }
 
 /* ========================================
-   Seating Override
-   ======================================== */
-.seat {
-  height: 26px !important;
-  width: 26px !important;
-}
-
-/* ========================================
    SVG Icon Fix - Consolidated and optimized
    ======================================== */
 

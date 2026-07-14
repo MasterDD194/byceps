@@ -1,0 +1,276 @@
+.seat-management {
+  position: relative;
+}
+
+.seat-management-guidance p {
+  margin: 0;
+}
+
+.seat-management-guidance p + p {
+  margin-top: 0.5rem;
+}
+
+.seat-management-participant-search {
+  margin-bottom: 1rem;
+  max-width: 28rem;
+}
+
+.seat-management-participant-search .form-control {
+  width: 100%;
+}
+
+.seat-management-participant-search-status {
+  color: var(--dimmed-color);
+  margin: 0.5rem 0 0;
+}
+
+.seat-management-participant-search-results {
+  background-color: #ffffff;
+  border: var(--border-color) solid 1px;
+  border-radius: var(--border-radius);
+  list-style: none;
+  margin: 0.25rem 0 0;
+  max-height: 14rem;
+  overflow-y: auto;
+  padding: 0;
+}
+
+.seat-management-participant-search-results li + li {
+  border-top: var(--border-color) solid 1px;
+}
+
+.seat-management-participant-search-result {
+  align-items: baseline;
+  appearance: none;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  width: 100%;
+}
+
+.seat-management-participant-search-result:hover,
+.seat-management-participant-search-result:focus-visible {
+  background-color: #eeeeee;
+}
+
+.seat-management-participant-search-result span {
+  color: var(--dimmed-color);
+}
+
+.seat-management-participant-search-result > * {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.seat-management-plan-frame {
+  max-width: 100%;
+  overflow: auto;
+  padding: 0.75rem;
+}
+
+.seat-management-plan {
+  background-color: #24272d;
+  background-position: left top;
+  background-repeat: no-repeat;
+  margin-inline: auto;
+  position: relative;
+}
+
+.seat-management-seat {
+  align-items: center;
+  appearance: none;
+  background: #555b65;
+  border: 2px solid #f4f4f4;
+  border-radius: 0.2rem;
+  box-shadow: none;
+  color: #ffffff;
+  cursor: pointer;
+  display: flex;
+  font-size: 0.55rem;
+  font-weight: bold;
+  justify-content: center;
+  line-height: 1;
+  margin: 0;
+  padding: 0;
+  position: absolute;
+  transform: rotate(var(--seat-rotation));
+}
+
+.seat-management-seat-label {
+  display: none;
+}
+
+.seat-management-seat--free {
+  background: #087f5b;
+  border-radius: 50%;
+}
+
+.seat-management-seat--occupied {
+  background: #c92a2a;
+}
+
+.seat-management-seat--blocked {
+  background: repeating-linear-gradient(
+    45deg,
+    #343a40,
+    #343a40 3px,
+    #f59f00 3px,
+    #f59f00 6px
+  );
+  border-color: #ffffff;
+}
+
+.seat-management-seat--occupied.seat-management-seat--blocked {
+  border-color: #c92a2a;
+}
+
+.seat-management-seat--group {
+  background: #7048e8;
+  border-radius: 50% 0;
+}
+
+.seat-management-seat--occupied.seat-management-seat--group {
+  background: linear-gradient(135deg, #c92a2a 50%, #7048e8 50%);
+}
+
+.seat-management-seat--unavailable {
+  border-style: dashed;
+  opacity: 0.65;
+}
+
+.seat-management-seat--source {
+  box-shadow: 0 0 0 3px #ffd43b, 0 0 0 5px #1b1d21;
+}
+
+.seat-management-seat--target {
+  box-shadow: 0 0 0 3px #4dabf7, 0 0 0 5px #1b1d21;
+}
+
+.seat.seat-management-seat:hover {
+  background: #555b65;
+  filter: brightness(1.15);
+}
+
+.seat.seat-management-seat--free:hover {
+  background: #087f5b;
+}
+
+.seat.seat-management-seat--occupied:hover {
+  background: #c92a2a;
+}
+
+.seat.seat-management-seat--blocked:hover {
+  background: repeating-linear-gradient(
+    45deg,
+    #343a40,
+    #343a40 3px,
+    #f59f00 3px,
+    #f59f00 6px
+  );
+}
+
+.seat.seat-management-seat--group:hover {
+  background: #7048e8;
+}
+
+.seat.seat-management-seat--occupied.seat-management-seat--group:hover {
+  background: linear-gradient(135deg, #c92a2a 50%, #7048e8 50%);
+}
+
+.seat-management-seat:focus-visible {
+  outline: 3px solid #ffffff;
+  outline-offset: 4px;
+  z-index: 2;
+}
+
+.seat-management-tooltip {
+  background-color: #ffffff;
+  border: var(--border-color) solid 1px;
+  border-radius: var(--border-radius);
+  box-shadow: 0 0.25rem 1rem rgb(0 0 0 / 25%);
+  max-width: min(20rem, calc(100vw - 1rem));
+  overflow-wrap: anywhere;
+  padding: 0.5rem 0.75rem;
+  pointer-events: none;
+  position: fixed;
+  white-space: normal;
+  z-index: 1000;
+}
+
+.seat-management-tooltip-participant {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+  margin-top: 0.5rem;
+}
+
+.seat-management-status-row {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  justify-content: space-between;
+  margin-top: 1rem;
+}
+
+.seat-management-status {
+  font-weight: bold;
+  margin: 0;
+}
+
+.seat-management-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+  list-style: none;
+  margin: 1rem 0 0;
+  padding: 0;
+}
+
+.seat-management-legend li {
+  align-items: center;
+  display: flex;
+  gap: 0.4rem;
+}
+
+.seat-management-legend-marker {
+  border: 2px solid #f4f4f4;
+  display: inline-block;
+  height: 1rem;
+  width: 1rem;
+}
+
+.seat-management-actions {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr));
+  margin-top: 1.5rem;
+}
+
+.seat-management-action {
+  margin: 0;
+}
+
+.seat-management-action h2 {
+  margin-top: 0;
+}
+
+.seat-management-action .form-control {
+  max-width: 100%;
+}
+
+.seat-management-action .button {
+  margin-top: 0.75rem;
+}
+
+@media (max-width: 40rem) {
+  .seat-management-plan-frame {
+    padding: 0.25rem;
+  }
+}

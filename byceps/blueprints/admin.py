@@ -56,6 +56,10 @@ def register_admin_blueprints(
         ('services.page.blueprints.admin', '/pages'),
         ('services.party.blueprints.admin', '/parties'),
         ('services.seating.blueprints.admin', '/seating'),
+        (
+            'services.seating.management.blueprints.admin',
+            '/seating/management',
+        ),
         ('services.shop.blueprints.admin', None),
         (
             'services.shop.cancellation_request.blueprints.admin',
@@ -92,7 +96,9 @@ def register_admin_blueprints(
     if metrics_enabled:
         blueprints.append(('services.metrics.blueprints.metrics', '/metrics'))
 
-    if importlib_util.find_spec('byceps.services.lan_tournament.blueprints.admin'):
+    if importlib_util.find_spec(
+        'byceps.services.lan_tournament.blueprints.admin'
+    ):
         blueprints.append(
             ('services.lan_tournament.blueprints.admin', '/lan-tournaments')
         )

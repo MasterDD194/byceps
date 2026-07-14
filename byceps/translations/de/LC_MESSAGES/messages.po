@@ -341,6 +341,7 @@ msgstr "alle Teilnehmer"
 #: byceps/services/ticketing/checkin/blueprints/admin/templates/admin/ticketing/checkin/_ticket_list.html:23
 #: byceps/services/user/blueprints/admin/templates/admin/user/_view_tickets.html:13
 #: byceps/services/user_profile/blueprints/site/templates/site/user_profile/_current_party_attendance.html:7
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:68
 msgid "Seat"
 msgid_plural "Seats"
 msgstr[0] "Sitzplatz"
@@ -1924,6 +1925,7 @@ msgstr "Lösen"
 
 #: byceps/services/board/blueprints/site/templates/site/board/topic_moderate_form.html:104
 #: byceps/services/board/blueprints/site/templates/site/board/topic_moderate_form.html:118
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:141
 msgid "Move"
 msgstr "Verschieben"
 
@@ -5200,8 +5202,13 @@ msgstr "nicht festgelegt"
 
 #: byceps/services/party/blueprints/admin/templates/admin/party/view.html:81
 #: byceps/services/party/blueprints/admin/templates/macros/admin/party.html:64
+#: byceps/services/core/blueprints/admin/templates/layout/admin/_header_nav_party.html:37
 #: byceps/services/seating/blueprints/site/templates/site/seating/view_area.html:7
 #: byceps/services/seating/blueprints/site/templates/site/seating/view_area.html:28
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/index.html:5
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/index.html:9
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:6
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:45
 msgid "Seat management"
 msgstr "Sitzplatzverwaltung"
 
@@ -10027,3 +10034,279 @@ msgstr "Tickets bezahlt"
 msgid "Order tickets"
 msgstr "Tickets bestellen"
 
+#: byceps/services/seating/management/blueprints/admin/forms.py:19
+msgid "Source seat"
+msgstr "Ausgangssitzplatz"
+
+#: byceps/services/seating/management/blueprints/admin/forms.py:24
+msgid "Target seat"
+msgstr "Zielsitzplatz"
+
+#: byceps/services/seating/management/blueprints/admin/forms.py:72
+#, python-format
+msgid "occupied by %(screen_name)s"
+msgstr "belegt durch %(screen_name)s"
+
+#: byceps/services/seating/management/blueprints/admin/forms.py:80
+msgid "blocked"
+msgstr "gesperrt"
+
+#: byceps/services/seating/management/blueprints/admin/forms.py:82
+msgid "group seat"
+msgstr "Gruppensitzplatz"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/index.html:11
+msgid "Select a seating area to move or swap occupants and to block or unblock individual seats."
+msgstr "Wähle einen Sitzbereich aus, um Sitzplatzinhaber zu verschieben oder zu tauschen und einzelne Sitzplätze zu sperren oder zu entsperren."
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:10
+#, python-format
+msgid "Seat %(label)s, occupied group seat"
+msgstr "Sitzplatz %(label)s, belegter Gruppensitzplatz"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:12
+#, python-format
+msgid "Seat %(label)s, group seat"
+msgstr "Sitzplatz %(label)s, Gruppensitzplatz"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:14
+#, python-format
+msgid "Seat %(label)s, blocked and occupied"
+msgstr "Sitzplatz %(label)s, gesperrt und belegt"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:16
+#, python-format
+msgid "Seat %(label)s, blocked"
+msgstr "Sitzplatz %(label)s, gesperrt"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:18
+#, python-format
+msgid "Seat %(label)s, occupied and unavailable"
+msgstr "Sitzplatz %(label)s, belegt und nicht verfügbar"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:20
+#, python-format
+msgid "Seat %(label)s, occupied by %(screen_name)s"
+msgstr "Sitzplatz %(label)s, belegt durch %(screen_name)s"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:22
+#, python-format
+msgid "Seat %(label)s, occupied"
+msgstr "Sitzplatz %(label)s, belegt"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:24
+#, python-format
+msgid "Seat %(label)s, free"
+msgstr "Sitzplatz %(label)s, frei"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:53
+msgid "Select an occupied source seat, then select a free target to move or another occupied target to swap."
+msgstr "Wähle einen belegten Ausgangssitzplatz und danach einen freien Zielsitzplatz zum Verschieben oder einen anderen belegten Zielsitzplatz zum Tauschen aus."
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:54
+msgid "Only free individual seats can be blocked. Occupied seats must be moved or released separately before they can be blocked."
+msgstr "Nur freie einzelne Sitzplätze können gesperrt werden. Belegte Sitzplätze müssen zuvor verschoben oder separat freigegeben werden."
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:55
+msgid "The forms below remain usable without JavaScript."
+msgstr "Die folgenden Formulare funktionieren auch ohne JavaScript."
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:61
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:120
+msgid "No seat selected."
+msgstr "Kein Sitzplatz ausgewählt."
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:62
+#, python-brace-format
+msgid "Source seat selected: {label}"
+msgstr "Ausgangssitzplatz ausgewählt: {label}"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:63
+#, python-brace-format
+msgid "Move target selected: {label}"
+msgstr "Zielsitzplatz zum Verschieben ausgewählt: {label}"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:64
+#, python-brace-format
+msgid "Swap target selected: {label}"
+msgstr "Zielsitzplatz zum Tauschen ausgewählt: {label}"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:65
+#, python-brace-format
+msgid "Seat selected for blocking: {label}"
+msgstr "Sitzplatz zum Sperren ausgewählt: {label}"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:66
+#, python-brace-format
+msgid "Seat selected for unblocking: {label}"
+msgstr "Sitzplatz zum Entsperren ausgewählt: {label}"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:67
+#, python-brace-format
+msgid "Seat cannot be used for this individual operation: {label}"
+msgstr "Sitzplatz kann für diese Einzelaktion nicht verwendet werden: {label}"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:69
+msgid "No matching participant found."
+msgstr "Kein passender Teilnehmer gefunden."
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:72
+msgid "Search participant by nickname"
+msgstr "Teilnehmer nach Nickname suchen"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:83
+msgid "Graphical seating plan"
+msgstr "Grafischer Sitzplan"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:121
+msgid "Reset graphical selection"
+msgstr "Grafische Auswahl zurücksetzen"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:124
+msgid "Seat states"
+msgstr "Sitzplatzstatus"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:125
+msgid "Free"
+msgstr "Frei"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:126
+msgid "Occupied"
+msgstr "Belegt"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:127
+msgid "Blocked"
+msgstr "Gesperrt"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:128
+msgid "Group seat"
+msgstr "Gruppensitzplatz"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:129
+msgid "Selected source"
+msgstr "Ausgewählter Ausgangssitzplatz"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:130
+msgid "Selected target"
+msgstr "Ausgewählter Zielsitzplatz"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:131
+msgid "Unavailable"
+msgstr "Nicht verfügbar"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:137
+msgid "Move occupant"
+msgstr "Sitzplatzinhaber verschieben"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:146
+msgid "Swap occupants"
+msgstr "Sitzplatzinhaber tauschen"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:150
+msgid "Swap"
+msgstr "Tauschen"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:155
+msgid "Block seat"
+msgstr "Sitzplatz sperren"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:156
+msgid "Blocking never releases or moves an occupying ticket."
+msgstr "Beim Sperren wird ein belegendes Ticket niemals freigegeben oder verschoben."
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:159
+msgid "Block"
+msgstr "Sperren"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:164
+msgid "Unblock seat"
+msgstr "Sitzplatz entsperren"
+
+#: byceps/services/seating/management/blueprints/admin/templates/admin/seating/management/view_area.html:167
+msgid "Unblock"
+msgstr "Entsperren"
+
+#: byceps/services/seating/management/blueprints/admin/views.py:71
+#: byceps/services/seating/management/blueprints/admin/views.py:98
+msgid "Please select valid source and target seats."
+msgstr "Bitte wähle gültige Ausgangs- und Zielsitzplätze aus."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:82
+msgid "The seat occupant has been moved."
+msgstr "Der Sitzplatzinhaber wurde verschoben."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:109
+msgid "The seat occupants have been swapped."
+msgstr "Die Sitzplatzinhaber wurden getauscht."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:139
+msgid "Please select a valid seat."
+msgstr "Bitte wähle einen gültigen Sitzplatz aus."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:151
+msgid "The seat has been blocked."
+msgstr "Der Sitzplatz wurde gesperrt."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:153
+msgid "The seat has been unblocked."
+msgstr "Der Sitzplatz wurde entsperrt."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:158
+msgid "The seat is already blocked."
+msgstr "Der Sitzplatz ist bereits gesperrt."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:160
+msgid "The seat is already unblocked."
+msgstr "Der Sitzplatz ist bereits entsperrt."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:199
+msgid "Source and target seat must differ."
+msgstr "Ausgangs- und Zielsitzplatz müssen verschieden sein."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:201
+msgid "The selected source seat is not occupied."
+msgstr "Der ausgewählte Ausgangssitzplatz ist nicht belegt."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:203
+msgid "The selected move target is not free."
+msgstr "Der ausgewählte Zielsitzplatz für die Verschiebung ist nicht frei."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:205
+msgid "The selected swap target is not occupied."
+msgstr "Der ausgewählte Zielsitzplatz für den Tausch ist nicht belegt."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:207
+msgid "This seat is occupied. Move the ticket or release the seat separately before blocking it."
+msgstr "Dieser Sitzplatz ist belegt. Verschiebe das Ticket oder gib den Sitzplatz separat frei, bevor du ihn sperrst."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:211
+msgid "Seat occupancy changed concurrently. Reload the page and try again."
+msgstr "Die Sitzplatzbelegung wurde gleichzeitig geändert. Lade die Seite neu und versuche es erneut."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:215
+msgid "Blocked seats cannot be used as relocation destinations."
+msgstr "Gesperrte Sitzplätze können nicht als Ziel für eine Verlagerung verwendet werden."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:219
+msgid "Bundle tickets cannot be moved individually."
+msgstr "Tickets aus einem Bundle können nicht einzeln verschoben werden."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:221
+msgid "Seats in a seat group cannot be managed individually."
+msgstr "Sitzplätze in einer Sitzplatzgruppe können nicht einzeln verwaltet werden."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:225
+msgid "The ticket belongs to a different party."
+msgstr "Das Ticket gehört zu einer anderen Party."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:227
+msgid "The ticket categories of the seats do not match."
+msgstr "Die Ticket-Kategorien der Sitzplätze stimmen nicht überein."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:231
+msgid "Revoked tickets cannot be moved."
+msgstr "Widerrufene Tickets können nicht verschoben werden."
+
+#: byceps/services/seating/management/blueprints/admin/views.py:233
+msgid "The seat management operation failed."
+msgstr "Die Sitzplatzverwaltungsaktion ist fehlgeschlagen."

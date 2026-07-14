@@ -1,0 +1,176 @@
+{% extends 'layout/admin/base.html' %}
+{% from 'macros/admin.html' import render_backlink %}
+{% from 'macros/forms.html' import form_field_errors %}
+{% set current_page = 'seating_management_admin' %}
+{% set current_page_party = party %}
+{% set page_title = [_('Seat management'), area.title, party.title] %}
+
+{% macro seat_accessible_label(seat) -%}
+  {%- if seat.grouped and seat.occupied -%}
+    {{ _('Seat %(label)s, occupied group seat', label=seat.display_label) }}
+  {%- elif seat.grouped -%}
+    {{ _('Seat %(label)s, group seat', label=seat.display_label) }}
+  {%- elif seat.blocked and seat.occupied -%}
+    {{ _('Seat %(label)s, blocked and occupied', label=seat.display_label) }}
+  {%- elif seat.blocked -%}
+    {{ _('Seat %(label)s, blocked', label=seat.display_label) }}
+  {%- elif seat.unavailable -%}
+    {{ _('Seat %(label)s, occupied and unavailable', label=seat.display_label) }}
+  {%- elif seat.occupied and seat.occupier and seat.occupier.screen_name -%}
+    {{ _('Seat %(label)s, occupied by %(screen_name)s', label=seat.display_label, screen_name=seat.occupier.screen_name) }}
+  {%- elif seat.occupied -%}
+    {{ _('Seat %(label)s, occupied', label=seat.display_label) }}
+  {%- else -%}
+    {{ _('Seat %(label)s, free', label=seat.display_label) }}
+  {%- endif %}
+{%- endmacro %}
+
+{% macro management_form_field(field, field_id) -%}
+  <div class="form-control-block{% if field.errors %} invalid{% endif %}">
+    {{ field.label(class='form-label', for=field_id) }}
+    {{ field(class='form-control', id=field_id) }}
+    {{- form_field_errors(field) -}}
+  </div>
+{%- endmacro %}
+
+{% block head %}
+  <link rel="stylesheet" href="{{ url_for('static', filename='style/seating.css') }}">
+  {%- if seat_stylesheet_site_id %}
+  <link rel="stylesheet" href="{{ url_for('site_file', site_id=seat_stylesheet_site_id, filename='style/seating.css') }}">
+  {%- endif %}
+  <link rel="stylesheet" href="{{ url_for('seating_management_admin.static', filename='style/seating_management.css') }}">
+{%- endblock %}
+
+{% block before_body %}
+  {{ render_backlink(url_for('.index', party_id=party.id), _('Seat management')) }}
+{% endblock %}
+
+{% block body %}
+
+  <h1 class="title">{{ area.title }}</h1>
+
+  <div class="box seat-management-guidance">
+    <p>{{ _('Select an occupied source seat, then select a free target to move or another occupied target to swap.') }}</p>
+    <p>{{ _('Only free individual seats can be blocked. Occupied seats must be moved or released separately before they can be blocked.') }}</p>
+    <p>{{ _('The forms below remain usable without JavaScript.') }}</p>
+  </div>
+
+  <div
+    id="seat-management"
+    class="seat-management"
+    data-status-empty="{{ _('No seat selected.') }}"
+    data-status-source="{{ _('Source seat selected: {label}') }}"
+    data-status-move-target="{{ _('Move target selected: {label}') }}"
+    data-status-swap-target="{{ _('Swap target selected: {label}') }}"
+    data-status-block="{{ _('Seat selected for blocking: {label}') }}"
+    data-status-unblock="{{ _('Seat selected for unblocking: {label}') }}"
+    data-status-unavailable="{{ _('Seat cannot be used for this individual operation: {label}') }}"
+    data-search-seat-label="{{ _('Seat') }}"
+    data-search-no-results="{{ _('No matching participant found.') }}"
+  >
+    <div id="seat-management-participant-search" class="seat-management-participant-search" hidden>
+      <label for="seat-management-participant-search-input" class="form-label">{{ _('Search participant by nickname') }}</label>
+      <input id="seat-management-participant-search-input" type="search" class="form-control" autocomplete="off">
+      <p id="seat-management-participant-search-status" class="seat-management-participant-search-status" role="status" aria-live="polite" hidden></p>
+      <ul id="seat-management-participant-search-results" class="seat-management-participant-search-results" hidden></ul>
+    </div>
+
+    <div class="seat-management-plan-frame">
+      <div
+        class="seat-management-plan"
+        {% if area.image_filename %}style="background-image: url('/data/parties/{{ area.party_id }}/seating/areas/{{ area.image_filename|urlencode }}'); width: {{ area.image_width or 640 }}px; height: {{ area.image_height or 480 }}px;"{% else %}style="width: {{ area.image_width or 640 }}px; height: {{ area.image_height or 480 }}px;"{% endif %}
+        role="group"
+        aria-label="{{ _('Graphical seating plan') }}"
+      >
+        {%- for seat in seats %}
+        <button
+          type="button"
+          class="seat seat-management-seat{% if seat.type_ %} seat-type--{{ seat.type_ }}{% endif %}{% if not seat.occupied and not seat.blocked and not seat.grouped %} seat-management-seat--free{% endif %}{% if seat.occupied %} seat-management-seat--occupied{% endif %}{% if seat.blocked %} seat-management-seat--blocked{% endif %}{% if seat.grouped %} seat-management-seat--group{% endif %}{% if seat.unavailable %} seat-management-seat--unavailable{% endif %}"
+          style="left: {{ seat.coord_x }}px; top: {{ seat.coord_y }}px; --seat-rotation: {{ seat.rotation or 0 }}deg;"
+          data-seat-id="{{ seat.id }}"
+          data-seat-label="{{ seat.display_label }}"
+          data-occupied="{{ 'true' if seat.occupied else 'false' }}"
+          data-blocked="{{ 'true' if seat.blocked else 'false' }}"
+          data-can-move-source="{{ 'true' if seat.can_move_source else 'false' }}"
+          data-can-swap="{{ 'true' if seat.can_swap else 'false' }}"
+          data-can-move-target="{{ 'true' if seat.can_move_target else 'false' }}"
+          data-can-block="{{ 'true' if seat.can_block else 'false' }}"
+          data-can-unblock="{{ 'true' if seat.can_unblock else 'false' }}"
+          {% if seat.occupier and seat.occupier.screen_name %}
+          data-occupier-name="{{ seat.occupier.screen_name }}"
+          data-occupier-avatar="{{ seat.occupier.avatar_url }}"
+          {% endif %}
+          aria-label="{{ seat_accessible_label(seat) }}{% if seat.occupied and seat.occupier and seat.occupier.screen_name and (seat.grouped or seat.blocked or seat.unavailable) %}, {{ seat.occupier.screen_name }}{% endif %}"
+          aria-pressed="false"
+          disabled
+        ><span class="seat-management-seat-label" aria-hidden="true">{{ seat.label or '' }}</span></button>
+        {%- endfor %}
+      </div>
+    </div>
+
+    <div id="seat-management-tooltip" class="seat-management-tooltip" aria-hidden="true" hidden>
+      <strong id="seat-management-tooltip-label"></strong>
+      <div id="seat-management-tooltip-participant" class="seat-management-tooltip-participant" hidden>
+        <div class="avatar size-48"><img id="seat-management-tooltip-avatar" alt=""></div>
+        <strong id="seat-management-tooltip-name"></strong>
+      </div>
+    </div>
+
+    <div class="seat-management-status-row">
+      <p id="seat-management-status" class="seat-management-status" aria-live="polite">{{ _('No seat selected.') }}</p>
+      <button id="seat-management-reset" type="button" class="button is-compact" disabled>{{ _('Reset graphical selection') }}</button>
+    </div>
+
+    <ul class="seat-management-legend" aria-label="{{ _('Seat states') }}">
+      <li><span class="seat-management-legend-marker seat-management-seat--free"></span>{{ _('Free') }}</li>
+      <li><span class="seat-management-legend-marker seat-management-seat--occupied"></span>{{ _('Occupied') }}</li>
+      <li><span class="seat-management-legend-marker seat-management-seat--blocked"></span>{{ _('Blocked') }}</li>
+      <li><span class="seat-management-legend-marker seat-management-seat--group"></span>{{ _('Group seat') }}</li>
+      <li><span class="seat-management-legend-marker seat-management-seat--source"></span>{{ _('Selected source') }}</li>
+      <li><span class="seat-management-legend-marker seat-management-seat--target"></span>{{ _('Selected target') }}</li>
+      <li><span class="seat-management-legend-marker seat-management-seat--unavailable"></span>{{ _('Unavailable') }}</li>
+    </ul>
+  </div>
+
+  <div class="seat-management-actions">
+    <section class="box seat-management-action">
+      <h2>{{ _('Move occupant') }}</h2>
+      <form action="{{ url_for('.move', area_id=area.id) }}" method="post">
+        {{ management_form_field(move_form.source_seat_id, 'move-source-seat-id') }}
+        {{ management_form_field(move_form.target_seat_id, 'move-target-seat-id') }}
+        <button type="submit" class="button color-primary">{{ _('Move') }}</button>
+      </form>
+    </section>
+
+    <section class="box seat-management-action">
+      <h2>{{ _('Swap occupants') }}</h2>
+      <form action="{{ url_for('.swap', area_id=area.id) }}" method="post">
+        {{ management_form_field(swap_form.source_seat_id, 'swap-source-seat-id') }}
+        {{ management_form_field(swap_form.target_seat_id, 'swap-target-seat-id') }}
+        <button type="submit" class="button color-primary">{{ _('Swap') }}</button>
+      </form>
+    </section>
+
+    <section class="box seat-management-action">
+      <h2>{{ _('Block seat') }}</h2>
+      <p>{{ _('Blocking never releases or moves an occupying ticket.') }}</p>
+      <form action="{{ url_for('.block', area_id=area.id) }}" method="post">
+        {{ management_form_field(block_form.seat_id, 'block-seat-id') }}
+        <button type="submit" class="button color-danger">{{ _('Block') }}</button>
+      </form>
+    </section>
+
+    <section class="box seat-management-action">
+      <h2>{{ _('Unblock seat') }}</h2>
+      <form action="{{ url_for('.unblock', area_id=area.id) }}" method="post">
+        {{ management_form_field(unblock_form.seat_id, 'unblock-seat-id') }}
+        <button type="submit" class="button color-primary">{{ _('Unblock') }}</button>
+      </form>
+    </section>
+  </div>
+
+{%- endblock %}
+
+{% block scripts %}
+  <script src="{{ url_for('seating_management_admin.static', filename='behavior/seating_management.js') }}"></script>
+{%- endblock %}
