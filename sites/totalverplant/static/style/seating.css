@@ -2,3 +2,26 @@
   height: 26px !important;
   width: 26px !important;
 }
+
+.seat-with-tooltip[data-blocked='true'] {
+  cursor: not-allowed;
+}
+
+.seat.seat--blocked,
+.seat.seat--blocked.seat--occupiable,
+.seat.seat--blocked:hover {
+  background-color: #555555;
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 2px,
+    rgba(255, 255, 255, 0.6) 2px,
+    rgba(255, 255, 255, 0.6) 4px
+  );
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.seat-with-tooltip:target .seat.seat--blocked {
+  background-color: #555555 !important;
+}

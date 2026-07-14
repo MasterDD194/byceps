@@ -1,0 +1,33 @@
+{# Intentionally overrides the public BYCEPS seating macros to expose seat.blocked for total-verpLANt. #}
+
+{% macro render_seat_link(seat) -%}
+  <a href="{{ url_for('seating.view_area', slug=seat.area.slug, _anchor='seat-%s'|format(seat.id)) }}">{{ seat.label|fallback(_('unnamed')) }}</a>
+{%- endmacro %}
+
+
+{% macro render_area(area, seats) -%}
+  <div class="area" style="background-image: url(/data/parties/{{ area.party_id }}/seating/areas/{{ area.image_filename }}); height: {{ area.image_height }}px; width: {{ area.image_width }}px;">
+    {%- for seat in seats|sort(attribute='coord_y')|sort(attribute='coord_x') %}
+    {{ render_seat_with_tooltip(seat) }}
+    {%- endfor %}
+  </div>
+{%- endmacro %}
+
+
+{% macro render_seat_with_tooltip(seat) -%}
+    <div id="seat-{{ seat.id }}" class="seat-with-tooltip" style="left: {{ seat.coord_x }}px; top: {{ seat.coord_y }}px;" data-seat-id="{{ seat.id }}" data-label="{{ seat.label }}{% if seat.blocked %} ({{ _('Blocked') }}){% endif %}"
+      {%- if seat.blocked %}
+      {{- ' ' }}data-blocked="true"
+      {%- endif %}
+      {%- if seat.occupied %}
+      {{- ' ' }}data-ticket-id="{{ seat.occupied_by_ticket_id }}"
+        {%- if seat.occupied_by_user %}
+          {%- with occupier = seat.occupied_by_user %}
+      {{- ' ' }}data-occupier-avatar="{{ occupier.avatar_url }}" data-occupier-name="{{ occupier.screen_name }}"
+          {%- endwith %}
+        {%- endif %}
+      {%- endif -%}
+    >
+      <div class="seat{% if seat.type_ %} seat-type--{{ seat.type_ }}{% endif %}{% if seat.occupied %} seat--occupied{% endif %}{% if seat.blocked %} seat--blocked{% endif %}"{% if seat.rotation %} style="transform: rotate({{ seat.rotation }}deg);"{% endif %}></div>
+    </div>
+{%- endmacro %}
