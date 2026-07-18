@@ -3,12 +3,15 @@
 :License: Revised BSD (see `LICENSE` file for details)
 """
 
+from types import SimpleNamespace
 from uuid import UUID
 
 from byceps.database import db
 from byceps.services.party import party_setting_service
 from byceps.services.seating.dbmodels.seat import DbSeat
 from byceps.services.seating.management import service
+from byceps.services.seating.management.blueprints.admin import views
+from byceps.services.site import site_service
 from byceps.services.ticketing.dbmodels.ticket import DbTicket
 
 from tests.helpers import generate_token, generate_uuid
@@ -258,6 +261,65 @@ def test_area_view_loads_primary_site_seating_stylesheet(
         )
     finally:
         party_setting_service.remove_setting(party.id, 'primary_party_site_id')
+
+
+def test_area_view_loads_associated_site_seating_stylesheet(
+    management_admin_client,
+    party,
+    make_management_area,
+    monkeypatch,
+    tmp_path,
+):
+    site_id = 'custom-site'
+    stylesheet_path = tmp_path / site_id / 'static/style/seating.css'
+    stylesheet_path.parent.mkdir(parents=True)
+    stylesheet_path.touch()
+    monkeypatch.setattr(views, 'SITES_PATH', tmp_path)
+    monkeypatch.setattr(
+        site_service,
+        'get_all_sites',
+        lambda: [SimpleNamespace(id=site_id, party_id=party.id)],
+    )
+    area = make_management_area()
+
+    response = management_admin_client.get(
+        f'{BASE_URL}/seating/management/areas/{area.id}'
+    )
+
+    assert f'/static_sites/{site_id}/style/seating.css' in response.get_data(
+        as_text=True
+    )
+
+
+def test_area_view_does_not_guess_between_site_stylesheets(
+    management_admin_client,
+    party,
+    make_management_area,
+    monkeypatch,
+    tmp_path,
+):
+    site_ids = ['custom-site-1', 'custom-site-2']
+    for site_id in site_ids:
+        stylesheet_path = tmp_path / site_id / 'static/style/seating.css'
+        stylesheet_path.parent.mkdir(parents=True)
+        stylesheet_path.touch()
+    monkeypatch.setattr(views, 'SITES_PATH', tmp_path)
+    monkeypatch.setattr(
+        site_service,
+        'get_all_sites',
+        lambda: [
+            SimpleNamespace(id=site_id, party_id=party.id)
+            for site_id in site_ids
+        ],
+    )
+    area = make_management_area()
+
+    response = management_admin_client.get(
+        f'{BASE_URL}/seating/management/areas/{area.id}'
+    )
+    html = response.get_data(as_text=True)
+
+    assert all(f'/static_sites/{site_id}/' not in html for site_id in site_ids)
 
 
 def test_area_view_ignores_noncanonical_site_stylesheet_path(

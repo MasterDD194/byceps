@@ -15,6 +15,7 @@ from byceps.services.party import party_service, party_setting_service
 from byceps.services.party.models import Party, PartyID
 from byceps.services.seating.management import errors, service
 from byceps.services.seating.models import SeatID, SeatingAreaID
+from byceps.services.site import site_service
 from byceps.services.ticketing import errors as ticketing_errors
 from byceps.util.framework.blueprint import create_blueprint
 from byceps.util.framework.flash import flash_error, flash_notice, flash_success
@@ -259,16 +260,26 @@ def _find_seat_stylesheet_site_id(party_id: PartyID) -> str | None:
     site_id = party_setting_service.find_setting_value(
         party_id, 'primary_party_site_id'
     )
-    if site_id is None:
-        return None
+    if site_id is not None:
+        return site_id if _seat_stylesheet_exists(site_id) else None
+
+    site_ids = [
+        site.id
+        for site in site_service.get_all_sites()
+        if site.party_id == party_id and _seat_stylesheet_exists(site.id)
+    ]
+    return site_ids[0] if len(site_ids) == 1 else None
+
+
+def _seat_stylesheet_exists(site_id: str) -> bool:
     if (SITES_PATH / site_id).name != site_id:
-        return None
+        return False
 
     sites_path = SITES_PATH.resolve()
     stylesheet_path = (
         SITES_PATH / site_id / 'static/style/seating.css'
     ).resolve()
     if not stylesheet_path.is_relative_to(sites_path):
-        return None
+        return False
 
-    return site_id if stylesheet_path.is_file() else None
+    return stylesheet_path.is_file()
