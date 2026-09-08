@@ -3,6 +3,7 @@ from datetime import datetime, UTC
 from urllib.parse import urlparse
 
 from byceps.services.party.models import PartyID
+from byceps.services.user.models import UserID
 from byceps.util.result import Err, Ok, Result
 
 from . import (
@@ -27,6 +28,7 @@ from .models.score_ordering import ScoreOrdering
 from .models.game_format import GameFormat, is_valid_combination
 from .models.elimination_mode import EliminationMode
 from .models.tournament_status import TournamentStatus
+from .tournament_log_service import create_log_entry
 
 
 # Statuses where only cosmetic fields may be edited.
@@ -336,12 +338,16 @@ def update_tournament(
 
 def delete_tournament(
     tournament_id: TournamentID,
+    initiator_id: UserID | None = None,
 ) -> None:
     """Delete a tournament and all dependent entities.
 
     SECURITY NOTE: Authorization must be checked at blueprint layer
     before calling this function (requires
-    'lan_tournament.administrate' permission).
+    'lan_tournament.delete' permission).
+
+    Log entries are kept; a `tournament-deleted` entry records the
+    tournament's name, party, game and status.
 
     CASCADE HANDLING: Deletes all dependent entities in correct
     order:
@@ -354,12 +360,33 @@ def delete_tournament(
     7. Teams
     8. Tournament itself
     """
+    tournament_repository.lock_tournament_for_update(tournament_id)
+
+    tournament = tournament_repository.get_tournament(tournament_id)
+
     # Delete in dependency order (children first, then parent).
     # All repo calls use commit=False so the entire cascade is a
     # single atomic transaction committed once at the end.
     # Wrapped in try/except to rollback on partial flush failure,
     # preventing session poisoning if a caller catches the exception.
     try:
+        create_log_entry(
+            'tournament-deleted',
+            tournament_id,
+            initiator_id,
+            data={
+                'name': tournament.name,
+                'party_id': str(tournament.party_id),
+                'game': tournament.game,
+                'tournament_status': (
+                    tournament.tournament_status.value
+                    if tournament.tournament_status is not None
+                    else None
+                ),
+            },
+            commit=False,
+        )
+
         tournament_repository.delete_submissions_for_tournament(
             tournament_id, commit=False
         )
@@ -459,14 +486,6 @@ def get_participant_counts_for_tournaments(
     )
 
 
-def _has_bracket_generated(
-    tournament_id: TournamentID,
-) -> bool:
-    """Check if brackets have been generated for the tournament."""
-    matches = tournament_repository.get_matches_for_tournament(tournament_id)
-    return len(matches) > 0
-
-
 def change_status(
     tournament_id: TournamentID,
     new_status: TournamentStatus,
@@ -481,13 +500,31 @@ def change_status(
     if result.is_err():
         return Err(result.unwrap_err())
 
-    # Only after a valid transition: check bracket exists when starting
-    if new_status == TournamentStatus.ONGOING:
-        if tournament.game_format and tournament.game_format.requires_bracket_generation:
-            if not _has_bracket_generated(tournament_id):
+    # Validate the bracket on a start, not on a resume from `PAUSED`:
+    # play has changed the bracket by then.
+    is_start = (
+        new_status == TournamentStatus.ONGOING
+        and tournament.tournament_status != TournamentStatus.PAUSED
+    )
+    if is_start:
+        if (
+            tournament.game_format
+            and tournament.game_format.requires_bracket_generation
+        ):
+            violations = (
+                tournament_match_service.validate_bracket_for_start(
+                    tournament_id, tournament=tournament
+                )
+            )
+            if violations:
+                # Only this violation has a catalogue entry.
+                if violations == ['no matches generated']:
+                    return Err(
+                        'Cannot start tournament without generated '
+                        'brackets. Generate brackets first.'
+                    )
                 return Err(
-                    'Cannot start tournament without generated brackets. '
-                    'Generate brackets first.'
+                    'Cannot start tournament: ' + '; '.join(violations)
                 )
 
     (event,) = result.unwrap()

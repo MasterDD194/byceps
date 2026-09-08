@@ -128,9 +128,10 @@ def validate_status_transition(
 
     allowed = _VALID_STATUS_TRANSITIONS.get(current_status, set())
     if new_status not in allowed:
+        # Keep this a static msgid; the view translates it.
         return Err(
-            f'Cannot transition from {current_status.name}'
-            f' to {new_status.name}.'
+            'Cannot transition the tournament to the requested '
+            'status from its current status.'
         )
 
     return Ok(new_status)
