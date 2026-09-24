@@ -71,7 +71,9 @@ def register_site_blueprints(
         ('services.user_profile.blueprints.site', '/users'),
     ]
 
-    if importlib_util.find_spec('byceps.services.lan_tournament.blueprints.site'):
+    if importlib_util.find_spec(
+        'byceps.services.lan_tournament.blueprints.site'
+    ):
         blueprints.append(
             ('services.lan_tournament.blueprints.site', '/lan-tournaments')
         )
@@ -79,6 +81,16 @@ def register_site_blueprints(
         log.warning(
             'Module byceps.services.lan_tournament.blueprints.site '
             'is not importable; skipping site blueprints for lan_tournament'
+        )
+
+    if importlib_util.find_spec(
+        'byceps.services.pizza_delivery.blueprints.site'
+    ):
+        blueprints.append(('services.pizza_delivery.blueprints.site', '/pizza'))
+    else:
+        log.warning(
+            'Module byceps.services.pizza_delivery.blueprints.site '
+            'is not importable; skipping site blueprints for pizza_delivery'
         )
 
     register_blueprints(app, blueprints)
