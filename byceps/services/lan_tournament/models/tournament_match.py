@@ -1,5 +1,6 @@
 from dataclasses import dataclass
 from datetime import datetime
+from enum import Enum
 from typing import TYPE_CHECKING, NewType
 from uuid import UUID
 
@@ -11,6 +12,17 @@ if TYPE_CHECKING:
     from .tournament_match_to_contestant import TournamentMatchToContestant
 
 TournamentMatchID = NewType('TournamentMatchID', UUID)
+
+
+class CorrectionCase(Enum):
+    """What a result correction affects downstream."""
+
+    NO_DOWNSTREAM = 'no_downstream'
+    UNCONFIRMED_DOWNSTREAM = 'unconfirmed_downstream'
+    # Retracts confirmed downstream matches; needs an acknowledgement.
+    CONFIRMED_DOWNSTREAM = 'confirmed_downstream'
+    # Deletes the bracket-reset grand final; needs an acknowledgement.
+    BRACKET_RESET_DELETION = 'bracket_reset_deletion'
 
 
 @dataclass(frozen=True, kw_only=True)

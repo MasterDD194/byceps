@@ -4,9 +4,6 @@ tests.unit.services.lan_tournament.test_tournament_service_bracket_check
 
 Verify that ``change_status()`` enforces (or skips) the bracket guard
 depending on the tournament's ``GameFormat.requires_bracket_generation`` flag.
-
-:Copyright: 2014-2026 Jochen Kupperschmidt
-:License: Revised BSD (see `LICENSE` file for details)
 """
 
 from datetime import datetime
@@ -19,6 +16,17 @@ from byceps.services.lan_tournament.models.tournament import (
 from byceps.services.lan_tournament.models.game_format import GameFormat
 from byceps.services.lan_tournament.models.elimination_mode import (
     EliminationMode,
+)
+from byceps.services.lan_tournament.models.tournament_match import (
+    TournamentMatch,
+    TournamentMatchID,
+)
+from byceps.services.lan_tournament.models.tournament_match_to_contestant import (
+    TournamentMatchToContestant,
+    TournamentMatchToContestantID,
+)
+from byceps.services.lan_tournament.models.tournament_participant import (
+    TournamentParticipantID,
 )
 from byceps.services.lan_tournament.models.tournament_status import (
     TournamentStatus,
@@ -55,6 +63,32 @@ def _create_tournament(**kwargs) -> Tournament:
     }
     defaults.update(kwargs)
     return Tournament(**defaults)
+
+
+def _build_valid_se_bracket(tournament_id):
+    """Return a single-match SE bracket that passes start validation."""
+    match = TournamentMatch(
+        id=TournamentMatchID(generate_uuid()),
+        tournament_id=tournament_id,
+        group_order=None,
+        match_order=0,
+        round=0,
+        next_match_id=None,
+        confirmed_by=None,
+        created_at=NOW,
+    )
+    contestants = [
+        TournamentMatchToContestant(
+            id=TournamentMatchToContestantID(generate_uuid()),
+            tournament_match_id=match.id,
+            team_id=None,
+            participant_id=TournamentParticipantID(generate_uuid()),
+            score=None,
+            created_at=NOW,
+        )
+        for _ in range(2)
+    ]
+    return [match], {match.id: contestants}
 
 
 # -------------------------------------------------------------------- #
@@ -101,14 +135,16 @@ def test_start_bracketless_mode_without_matches_succeeds(
 
 
 @patch(
+    'byceps.services.lan_tournament.tournament_match_service.tournament_repository'
+)
+@patch(
     'byceps.services.lan_tournament.tournament_service.tournament_repository'
 )
 @patch('byceps.services.lan_tournament.tournament_service.signals')
 def test_start_bracket_mode_without_matches_fails(
-    mock_signals, mock_repository
+    mock_signals, mock_repository, mock_match_repo
 ):
-    """A SINGLE_ELIMINATION tournament must NOT start without generated
-    matches -- the bracket guard must fire."""
+    """An SE tournament must not start with an invalid bracket."""
     from byceps.services.lan_tournament import tournament_service
 
     tournament = _create_tournament(
@@ -117,39 +153,50 @@ def test_start_bracket_mode_without_matches_fails(
     )
 
     mock_repository.get_tournament.return_value = tournament
-    mock_repository.get_matches_for_tournament.return_value = []
+    mock_match_repo.get_matches_for_tournament_ordered.return_value = []
+    mock_match_repo.get_contestants_for_tournament.return_value = {}
 
     result = tournament_service.change_status(
         tournament.id, TournamentStatus.ONGOING
     )
 
     assert result.is_err()
-    assert 'Cannot start tournament without generated brackets' in result.unwrap_err()
+    # An ungenerated bracket reports the catalogued sentence.
+    assert result.unwrap_err() == (
+        'Cannot start tournament without generated brackets. '
+        'Generate brackets first.'
+    )
 
 
 # -------------------------------------------------------------------- #
-# bracket mode (SE) with matches -> allowed
+# bracket mode (SE) with valid bracket -> allowed
 # -------------------------------------------------------------------- #
 
 
+@patch(
+    'byceps.services.lan_tournament.tournament_match_service.tournament_repository'
+)
 @patch(
     'byceps.services.lan_tournament.tournament_service.tournament_repository'
 )
 @patch('byceps.services.lan_tournament.tournament_service.signals')
 def test_start_bracket_mode_with_matches_succeeds(
-    mock_signals, mock_repository
+    mock_signals, mock_repository, mock_match_repo
 ):
-    """A SINGLE_ELIMINATION tournament with generated matches CAN start."""
+    """An SE tournament with a structurally valid bracket can start."""
     from byceps.services.lan_tournament import tournament_service
 
     tournament = _create_tournament(
         game_format=GameFormat.ONE_V_ONE,
         elimination_mode=EliminationMode.SINGLE_ELIMINATION,
     )
+    matches, contestants_by_match = _build_valid_se_bracket(tournament.id)
 
     mock_repository.get_tournament.return_value = tournament
-    # Simulate at least one generated match
-    mock_repository.get_matches_for_tournament.return_value = [object()]
+    mock_match_repo.get_matches_for_tournament_ordered.return_value = matches
+    mock_match_repo.get_contestants_for_tournament.return_value = (
+        contestants_by_match
+    )
 
     result = tournament_service.change_status(
         tournament.id, TournamentStatus.ONGOING
@@ -160,3 +207,182 @@ def test_start_bracket_mode_with_matches_succeeds(
     updated, event = result.unwrap()
     assert updated.tournament_status == TournamentStatus.ONGOING
     assert event.new_status == TournamentStatus.ONGOING
+
+
+# -------------------------------------------------------------------- #
+# invalid bracket blocks start without any override
+# -------------------------------------------------------------------- #
+
+
+@patch(
+    'byceps.services.lan_tournament.tournament_match_service.validate_bracket_for_start'
+)
+@patch(
+    'byceps.services.lan_tournament.tournament_service.tournament_repository'
+)
+@patch('byceps.services.lan_tournament.tournament_service.signals')
+def test_start_blocked_on_invalid_bracket_without_override(
+    mock_signals, mock_repository, mock_validate
+):
+    """A corrupted bracket blocks the start; the status stays unchanged."""
+    from byceps.services.lan_tournament import tournament_service
+
+    tournament = _create_tournament(
+        game_format=GameFormat.ONE_V_ONE,
+        elimination_mode=EliminationMode.SINGLE_ELIMINATION,
+    )
+
+    mock_repository.get_tournament.return_value = tournament
+    mock_validate.return_value = [
+        'match abc is missing next_match_id',
+    ]
+    update_mock = mock_repository.update_tournament
+
+    result = tournament_service.change_status(
+        tournament.id, TournamentStatus.ONGOING
+    )
+
+    assert result.is_err()
+    update_mock.assert_not_called()
+    mock_signals.tournament_status_changed.send.assert_not_called()
+
+
+@patch(
+    'byceps.services.lan_tournament.tournament_match_service.validate_bracket_for_start'
+)
+@patch(
+    'byceps.services.lan_tournament.tournament_service.tournament_repository'
+)
+@patch('byceps.services.lan_tournament.tournament_service.signals')
+def test_start_error_lists_violations(
+    mock_signals, mock_repository, mock_validate
+):
+    """The Err message contains the individual violation strings."""
+    from byceps.services.lan_tournament import tournament_service
+
+    tournament = _create_tournament(
+        game_format=GameFormat.ONE_V_ONE,
+        elimination_mode=EliminationMode.SINGLE_ELIMINATION,
+    )
+    violations = [
+        'match abc is missing next_match_id',
+        'no grand-final match',
+    ]
+
+    mock_repository.get_tournament.return_value = tournament
+    mock_validate.return_value = violations
+
+    result = tournament_service.change_status(
+        tournament.id, TournamentStatus.ONGOING
+    )
+
+    assert result.is_err()
+    message = result.unwrap_err()
+    for violation in violations:
+        assert violation in message
+
+
+# -------------------------------------------------------------------- #
+# resume (PAUSED -> ONGOING) must NOT re-run start validation
+# -------------------------------------------------------------------- #
+
+
+@patch(
+    'byceps.services.lan_tournament.tournament_service.tournament_match_service'
+)
+@patch(
+    'byceps.services.lan_tournament.tournament_service.tournament_repository'
+)
+@patch('byceps.services.lan_tournament.tournament_service.signals')
+def test_resume_from_paused_skips_bracket_validation(
+    mock_signals, mock_repository, mock_match_service
+):
+    """A resume is not a start, so the pre-start gate must not run."""
+    from byceps.services.lan_tournament import tournament_service
+
+    tournament = _create_tournament(
+        game_format=GameFormat.ONE_V_ONE,
+        elimination_mode=EliminationMode.SINGLE_ELIMINATION,
+        tournament_status=TournamentStatus.PAUSED,
+    )
+
+    mock_repository.get_tournament.return_value = tournament
+
+    result = tournament_service.change_status(
+        tournament.id, TournamentStatus.ONGOING
+    )
+
+    assert result.is_ok()
+    updated, event = result.unwrap()
+    assert updated.tournament_status == TournamentStatus.ONGOING
+    assert event.old_status == TournamentStatus.PAUSED
+
+    mock_match_service.validate_bracket_for_start.assert_not_called()
+
+
+@patch(
+    'byceps.services.lan_tournament.tournament_match_service.tournament_repository'
+)
+@patch(
+    'byceps.services.lan_tournament.tournament_service.tournament_repository'
+)
+@patch('byceps.services.lan_tournament.tournament_service.signals')
+def test_resume_from_paused_succeeds_with_wired_grand_final(
+    mock_signals, mock_repository, mock_match_repo
+):
+    """A paused tournament resumes after a DE bracket reset."""
+    from byceps.services.lan_tournament import tournament_service
+
+    tournament = _create_tournament(
+        game_format=GameFormat.ONE_V_ONE,
+        elimination_mode=EliminationMode.DOUBLE_ELIMINATION,
+        tournament_status=TournamentStatus.PAUSED,
+    )
+
+    mock_repository.get_tournament.return_value = tournament
+    # An empty bracket would fail start validation, were it run.
+    mock_match_repo.get_matches_for_tournament_ordered.return_value = []
+    mock_match_repo.get_contestants_for_tournament.return_value = {}
+
+    result = tournament_service.change_status(
+        tournament.id, TournamentStatus.ONGOING
+    )
+
+    assert result.is_ok()
+    assert result.unwrap()[0].tournament_status == TournamentStatus.ONGOING
+    mock_match_repo.get_matches_for_tournament_ordered.assert_not_called()
+
+
+@patch(
+    'byceps.services.lan_tournament.tournament_match_service.tournament_repository'
+)
+@patch(
+    'byceps.services.lan_tournament.tournament_service.tournament_repository'
+)
+@patch('byceps.services.lan_tournament.tournament_service.signals')
+def test_start_from_registration_closed_still_validates(
+    mock_signals, mock_repository, mock_match_repo
+):
+    """Gating the resume must not weaken the real start path."""
+    from byceps.services.lan_tournament import tournament_service
+
+    tournament = _create_tournament(
+        game_format=GameFormat.ONE_V_ONE,
+        elimination_mode=EliminationMode.SINGLE_ELIMINATION,
+        tournament_status=TournamentStatus.REGISTRATION_CLOSED,
+    )
+
+    mock_repository.get_tournament.return_value = tournament
+    mock_match_repo.get_matches_for_tournament_ordered.return_value = []
+    mock_match_repo.get_contestants_for_tournament.return_value = {}
+
+    result = tournament_service.change_status(
+        tournament.id, TournamentStatus.ONGOING
+    )
+
+    assert result.is_err()
+    assert result.unwrap_err() == (
+        'Cannot start tournament without generated brackets. '
+        'Generate brackets first.'
+    )
+    mock_match_repo.get_matches_for_tournament_ordered.assert_called_once()

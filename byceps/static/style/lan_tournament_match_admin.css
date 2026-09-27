@@ -1,0 +1,226 @@
+/* ================================================================
+   Match view — admin
+   ================================================================
+   Bracket position, correction cascade ledger and correction form.
+   ================================================================ */
+
+.lt-cascade {
+  --ltc-edge: 3px;
+  /* Translucent, to show on both warning and danger backgrounds. */
+  --ltc-rule: rgba(0, 0, 0, 0.28);
+  --ltc-ink: #333333;
+  --ltc-ink-soft: #666666;
+  --ltc-dim: var(--dimmed-color, #808080);
+  --ltc-danger: var(--color-danger, #ff2222);
+  --ltc-surface: #ffffff;
+  --ltc-gap: 1rem;
+
+  list-style: none;
+  margin: 0.75rem 0 0 0;
+  padding-left: var(--ltc-gap);
+  border-left: 2px solid var(--ltc-rule);
+}
+
+.lt-cascade__match {
+  background-color: var(--ltc-surface);
+  /* Reserved on every row to keep the text aligned. */
+  border-left: var(--ltc-edge) solid transparent;
+  border-radius: var(--border-radius, 0.25rem);
+  color: var(--ltc-ink);
+  margin-bottom: 0.5rem;
+  padding: 0.5rem 0.625rem;
+  position: relative;
+}
+
+.lt-cascade__match:last-child {
+  margin-bottom: 0;
+}
+
+/* the tie from the spine to the row */
+.lt-cascade__match::before {
+  background-color: var(--ltc-rule);
+  content: '';
+  height: 2px;
+  left: calc((var(--ltc-gap) + var(--ltc-edge)) * -1);
+  position: absolute;
+  top: 0.9rem;
+  width: calc(var(--ltc-gap) + var(--ltc-edge));
+}
+
+.lt-cascade__match--destructive {
+  border-left-color: var(--ltc-danger);
+}
+
+.lt-cascade__head {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.375rem 0.5rem;
+}
+
+.lt-cascade__code {
+  border: 1px solid var(--ltc-rule);
+  border-radius: 0.1875rem;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8125rem;
+  font-weight: bold;
+  padding: 0.05rem 0.35rem;
+  white-space: nowrap;
+}
+
+.lt-cascade__label {
+  color: var(--ltc-ink-soft);
+}
+
+.lt-cascade__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem;
+  margin-left: auto;
+}
+
+/* Shrink-to-fit columns keep each score beside its name. */
+.lt-cascade__scores {
+  column-gap: 1.5rem;
+  display: grid;
+  grid-template-columns: max-content max-content;
+  margin-top: 0.4rem;
+  row-gap: 0.125rem;
+}
+
+.lt-cascade__name--open {
+  color: var(--ltc-dim);
+  font-style: italic;
+}
+
+.lt-cascade__score {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  font-weight: bold;
+  text-align: right;
+}
+
+.lt-cascade__link {
+  display: inline-block;
+  font-size: 0.8125rem;
+  margin-top: 0.4rem;
+}
+
+@media (max-width: 36rem) {
+
+  .lt-cascade__tags {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .lt-cascade__scores {
+    max-width: none;
+  }
+
+}
+
+
+/* ────────────────────────────────────────────────────────────────
+   Bracket position, under the match title
+   ──────────────────────────────────────────────────────────────── */
+
+.lt-match__position {
+  color: #666666;
+  margin: 0.25rem 0 0 0;
+}
+
+
+/* ────────────────────────────────────────────────────────────────
+   Correction form
+   ──────────────────────────────────────────────────────────────── */
+
+.lt-correct__consent {
+  align-items: flex-start;
+  background-color: var(--color-danger-light, #ffcccc);
+  border: 1px solid var(--color-danger, #ff2222);
+  border-left-width: 3px;
+  border-radius: var(--border-radius, 0.25rem);
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  padding: 0.625rem 0.75rem;
+  transition: background-color 0.12s ease, border-color 0.12s ease;
+}
+
+.lt-correct__consent:has(input:checked) {
+  background-color: var(--color-success-light, #cceecc);
+  border-color: var(--color-success, #55cc00);
+}
+
+.lt-correct__consent input {
+  flex: 0 0 auto;
+  margin: 0;
+  transform: scale(1.2);
+  transform-origin: left center;
+}
+
+.lt-correct__consent label {
+  cursor: pointer;
+  font-weight: bold;
+  line-height: 1.4;
+  max-width: 70ch;
+}
+
+.lt-correct__scores {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1rem;
+}
+
+.lt-correct__field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.lt-correct__field label {
+  color: #666666;
+  font-size: 0.8125rem;
+}
+
+/* Admin form controls lack `.form-control`, so style them here. */
+.lt-correct__score,
+.lt-correct__reason {
+  background-color: #ffffff;
+  border: 1px solid #bbbbbb;
+  border-radius: var(--border-radius, 0.25rem);
+  font-size: 0.875rem;
+  padding: 0.4rem;
+}
+
+.lt-correct__score {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-variant-numeric: tabular-nums;
+  width: 6rem;
+}
+
+.lt-correct__hint {
+  color: var(--dimmed-color, #808080);
+  font-size: 0.8125rem;
+  line-height: 1.5;
+  max-width: 68ch;
+}
+
+.lt-correct__group label {
+  display: block;
+  margin-bottom: 0.25rem;
+}
+
+.lt-correct__reason {
+  display: block;
+  max-width: 48rem;
+  width: 100%;
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  .lt-correct__consent {
+    transition: none;
+  }
+
+}
