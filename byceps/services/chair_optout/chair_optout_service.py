@@ -14,6 +14,7 @@ from sqlalchemy import select
 from byceps.database import db
 from byceps.services.party.models import PartyID
 from byceps.services.seating.dbmodels.seat import DbSeat
+from byceps.services.ticketing import ticket_service
 from byceps.services.ticketing.dbmodels.ticket import DbTicket
 from byceps.services.ticketing.models.ticket import TicketID
 from byceps.services.user.dbmodels import DbUser
@@ -157,6 +158,23 @@ def list_optouts_for_user(
         .order_by(DbTicket.code)
     ).all()
     return list(get_current_optouts_for_tickets(tickets).values())
+
+
+def find_first_unanswered_ticket_id_for_user(
+    party_id: PartyID, user_id: UserID
+) -> TicketID | None:
+    """Find a current ticket for which the user has not specified a chair."""
+    tickets = ticket_service.get_tickets_used_by_user(user_id, party_id)
+    answered_ticket_ids = get_current_optouts_for_tickets(tickets)
+
+    return next(
+        (
+            ticket.id
+            for ticket in tickets
+            if ticket.id not in answered_ticket_ids
+        ),
+        None,
+    )
 
 
 def resolve_seat_label_for_ticket(ticket: DbTicket | None) -> str | None:

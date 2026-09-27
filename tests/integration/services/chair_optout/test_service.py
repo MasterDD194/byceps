@@ -32,6 +32,32 @@ def test_answer_without_seat_is_reported(
     assert entry.brings_own_chair is False
 
 
+def test_unanswered_ticket_prompt_clears_after_answer(
+    admin_app, party, make_user, make_ticket_category
+):
+    participant = make_user(generate_token())
+    category = make_ticket_category(party.id, generate_token())
+    ticket = ticket_creation_service.create_ticket(
+        category, participant, user=participant
+    )
+
+    assert (
+        chair_optout_service.find_first_unanswered_ticket_id_for_user(
+            party.id, participant.id
+        )
+        == ticket.id
+    )
+
+    chair_optout_service.set_optout(party.id, ticket.id, participant.id, False)
+
+    assert (
+        chair_optout_service.find_first_unanswered_ticket_id_for_user(
+            party.id, participant.id
+        )
+        is None
+    )
+
+
 def test_seat_change_preserves_answer(
     admin_app, party, user, make_ticket_category
 ):
