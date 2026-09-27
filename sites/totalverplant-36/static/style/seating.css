@@ -1,0 +1,21 @@
+/* Großsporthalle seat geometry.
+ *
+ * The seat coordinates in the hall plan image are laid out for 26px
+ * seat boxes. Core BYCEPS renders 11px dots, which float apart on this
+ * grid, so the party site overrides the seat size for the site seating
+ * plan (.area) and for the administrative seat management plan.
+ *
+ * Intentionally without `!important`, so that the seat legend of the
+ * site page keeps its own swatch size.
+ */
+
+.area .seat,
+.seat-management-plan .seat {
+  height: 26px;
+  width: 26px;
+}
+
+.area .seat.seat-type--narrow,
+.seat-management-plan .seat.seat-type--narrow {
+  width: 26px;
+}

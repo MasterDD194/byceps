@@ -592,6 +592,39 @@ def test_blueprint_local_assets_are_served(management_admin_client):
     assert 'pointer-events: none;' in tooltip_rule
 
 
+def test_seats_keep_the_core_look_and_stay_angular(management_admin_client):
+    """Seats must not be rendered as circles or with their own border.
+
+    The seat size is provided by the party site's seating stylesheet,
+    so the management plan must not hard-code it either.
+    """
+    css_response = management_admin_client.get(
+        f'{BASE_URL}/seating/management/static/style/seating_management.css'
+    )
+    css = css_response.get_data(as_text=True)
+
+    for selector in (
+        '.seat-management-seat--free {',
+        '.seat-management-seat--occupied {',
+        '.seat-management-seat--group {',
+        '.seat-management-legend-marker {',
+    ):
+        rule = css.split(selector, 1)[1].split('}', 1)[0]
+        assert 'border-radius' not in rule, selector
+
+    seat_rule = css.split('.seat-management-seat {', 1)[1].split('}', 1)[0]
+    declarations = [
+        declaration.strip()
+        for declaration in seat_rule.split(';')
+        if declaration
+    ]
+
+    assert 'border-radius: 0' in declarations
+    assert 'border: 0' in declarations
+    assert not any('box-shadow' in d for d in declarations)
+    assert not any(d.startswith(('width', 'height')) for d in declarations)
+
+
 def test_german_title_and_actions_render(
     management_admin_client, make_management_area
 ):
