@@ -142,6 +142,10 @@ def manage_seats_in_area(slug):
     else:
         managed_tickets = []
 
+    can_view_chair_information = bool(
+        managed_tickets
+    ) and ticket_service.uses_any_ticket_for_party(g.user.id, g.party.id)
+
     seat_utilization = seat_service.get_seat_utilization(g.party.id)
 
     return {
@@ -152,6 +156,7 @@ def manage_seats_in_area(slug):
         'seat_management_enabled': seat_management_enabled,
         'managed_tickets': managed_tickets,
         'selected_ticket_id': selected_ticket_id,
+        'can_view_chair_information': can_view_chair_information,
     }
 
 

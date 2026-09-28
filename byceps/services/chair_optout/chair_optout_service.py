@@ -10,6 +10,7 @@ from datetime import datetime
 from typing import cast
 
 from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 
 from byceps.database import db
 from byceps.services.party.models import PartyID
@@ -61,21 +62,25 @@ def set_optout(
         raise ValueError('Ticket is not currently used by this user.')
 
     now = datetime.utcnow()
-    db_optout = _get_db_optout(party_id, ticket_id)
-
-    if db_optout is None:
-        db_optout = DbPartyTicketChairOptout(
-            party_id,
-            ticket_id,
-            user_id,
-            now,
+    db_optout = db.session.scalars(
+        insert(DbPartyTicketChairOptout)
+        .values(
+            party_id=party_id,
+            ticket_id=ticket_id,
+            user_id=user_id,
             brings_own_chair=brings_own_chair,
+            updated_at=now,
         )
-        db.session.add(db_optout)
-    else:
-        db_optout.user_id = user_id
-        db_optout.brings_own_chair = brings_own_chair
-        db_optout.updated_at = now
+        .on_conflict_do_update(
+            index_elements=['party_id', 'ticket_id'],
+            set_={
+                'user_id': user_id,
+                'brings_own_chair': brings_own_chair,
+                'updated_at': now,
+            },
+        )
+        .returning(DbPartyTicketChairOptout)
+    ).one()
 
     db.session.commit()
 
