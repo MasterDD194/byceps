@@ -63,6 +63,23 @@ Documentation
 See `https://byceps.readthedocs.io/ <https://byceps.readthedocs.io/>`_.
 
 
+Seat management styling
+=======================
+
+The administrative seating plan loads BYCEPS's standard ``seating.css``.
+If the party has a primary site with ``sites/<site-id>/static/style/seating.css``,
+it loads that stylesheet afterwards. Without a primary site, it uses a site
+stylesheet only if exactly one site associated with the party provides one.
+Otherwise, the standard seat size and styling remain in effect. A site's
+stylesheet can override seat dimensions without changing BYCEPS core CSS.
+
+Public seating pages do not load a site stylesheet automatically: a site
+template override must include it after the standard seating stylesheet.
+The totalverplant-36 public seating template currently specifies its seat
+dimensions inline; its site stylesheet is used by the administrative plan
+when totalverplant-36 is selected as described above.
+
+
 Code Status
 ===========
 
