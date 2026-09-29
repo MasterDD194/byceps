@@ -6,7 +6,7 @@ byceps.services.chair_optout.chair_optout_service
 """
 
 from collections.abc import Sequence
-from datetime import datetime
+from datetime import datetime, UTC
 from typing import cast
 
 from sqlalchemy import select
@@ -57,34 +57,41 @@ def set_optout(
     brings_own_chair: bool,
 ) -> PartyTicketChairOptout:
     """Store the current ticket user's chair answer."""
-    db_ticket = _find_eligible_ticket(party_id, ticket_id, user_id)
-    if db_ticket is None:
-        raise ValueError('Ticket is not currently used by this user.')
+    try:
+        # Serialize answers with ticket reassignment and revocation, not just
+        # with other answers. Keep the lock until the answer is committed.
+        db_ticket = _find_eligible_ticket(party_id, ticket_id, user_id)
+        if db_ticket is None:
+            raise ValueError('Ticket is not currently used by this user.')
 
-    now = datetime.utcnow()
-    db_optout = db.session.scalars(
-        insert(DbPartyTicketChairOptout)
-        .values(
-            party_id=party_id,
-            ticket_id=ticket_id,
-            user_id=user_id,
-            brings_own_chair=brings_own_chair,
-            updated_at=now,
-        )
-        .on_conflict_do_update(
-            index_elements=['party_id', 'ticket_id'],
-            set_={
-                'user_id': user_id,
-                'brings_own_chair': brings_own_chair,
-                'updated_at': now,
-            },
-        )
-        .returning(DbPartyTicketChairOptout)
-    ).one()
+        now = datetime.now(UTC).replace(tzinfo=None)
+        db_optout = db.session.scalars(
+            insert(DbPartyTicketChairOptout)
+            .values(
+                party_id=party_id,
+                ticket_id=ticket_id,
+                user_id=user_id,
+                brings_own_chair=brings_own_chair,
+                updated_at=now,
+            )
+            .on_conflict_do_update(
+                index_elements=['party_id', 'ticket_id'],
+                set_={
+                    'user_id': user_id,
+                    'brings_own_chair': brings_own_chair,
+                    'updated_at': now,
+                },
+            )
+            .returning(DbPartyTicketChairOptout)
+            .execution_options(populate_existing=True)
+        ).one()
+        answer = _db_entity_to_optout(db_optout)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        raise
 
-    db.session.commit()
-
-    return _db_entity_to_optout(db_optout)
+    return answer
 
 
 def list_optouts_for_party(
@@ -216,12 +223,14 @@ def _find_eligible_ticket(
     party_id: PartyID, ticket_id: TicketID, user_id: UserID
 ) -> DbTicket | None:
     return db.session.execute(
-        select(DbTicket).filter_by(
+        select(DbTicket)
+        .filter_by(
             id=ticket_id,
             party_id=party_id,
             used_by_id=user_id,
             revoked=False,
         )
+        .with_for_update()
     ).scalar_one_or_none()
 
 

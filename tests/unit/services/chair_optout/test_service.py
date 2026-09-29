@@ -22,6 +22,7 @@ class DummySession:
         self.db_optout = db_optout
         self.statement = None
         self.commit_count = 0
+        self.rollback_count = 0
 
     def scalars(self, statement):
         self.statement = statement
@@ -36,6 +37,9 @@ class DummySession:
 
     def commit(self) -> None:
         self.commit_count += 1
+
+    def rollback(self) -> None:
+        self.rollback_count += 1
 
 
 def _make_ids() -> tuple[PartyID, TicketID, UserID]:
@@ -137,13 +141,29 @@ def test_set_optout_updates_user_after_reassignment(monkeypatch):
 
 
 def test_set_optout_rejects_ineligible_ticket(monkeypatch):
-    party_id, ticket_id, user_id = _make_ids()
+    session, party_id, ticket_id, user_id = _prepare_set_optout(monkeypatch)
     monkeypatch.setattr(
         chair_optout_service, '_find_eligible_ticket', lambda *_: None
     )
 
     with pytest.raises(ValueError):
         chair_optout_service.set_optout(party_id, ticket_id, user_id, True)
+
+    assert session.commit_count == 0
+    assert session.rollback_count == 1
+
+
+def test_set_optout_rolls_back_failed_commit(monkeypatch):
+    session, party_id, ticket_id, user_id = _prepare_set_optout(monkeypatch)
+
+    def fail_commit():
+        raise RuntimeError('Commit failed')
+
+    monkeypatch.setattr(session, 'commit', fail_commit)
+    with pytest.raises(RuntimeError, match='Commit failed'):
+        chair_optout_service.set_optout(party_id, ticket_id, user_id, True)
+
+    assert session.rollback_count == 1
 
 
 def test_current_optouts_ignore_stale_participant_and_party(monkeypatch):

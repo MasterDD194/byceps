@@ -111,7 +111,9 @@ def export_as_csv(party_id):
             entry.full_name or '',
             entry.screen_name or '',
             entry.ticket_code,
-            entry.seat_label or gettext('no seat'),
+            (entry.seat_label or gettext('unnamed'))
+            if entry.has_seat
+            else gettext('no seat'),
             _get_status_label(entry.brings_own_chair),
         )
         for entry in report_entries
@@ -207,10 +209,16 @@ def _find_site_server_name_for_party(party: Party) -> str | None:
         for site in site_service.get_current_sites(party.brand_id)
         if site.party_id == party.id
     ]
-    if not sites:
-        return None
+    primary_site_id = party_setting_service.find_setting_value(
+        party.id, 'primary_party_site_id'
+    )
+    if primary_site_id is not None:
+        return next(
+            (site.server_name for site in sites if site.id == primary_site_id),
+            None,
+        )
 
-    return min(site.server_name for site in sites)
+    return sites[0].server_name if len(sites) == 1 else None
 
 
 def _build_seat_urls_by_ticket_id(report_entries, site_server_name):

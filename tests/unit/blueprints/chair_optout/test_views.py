@@ -462,6 +462,11 @@ def test_participant_list_filters_entries(
                 )
             ],
         )
+        monkeypatch.setattr(
+            admin_views.party_setting_service,
+            'find_setting_value',
+            lambda *_: None,
+        )
 
         context = _unwrap(admin_views.chair_information)('party-1')
 
@@ -507,12 +512,62 @@ def test_participant_list_is_default_and_builds_seat_deep_link(
                 )
             ],
         )
+        monkeypatch.setattr(
+            admin_views.party_setting_service,
+            'find_setting_value',
+            lambda *_: None,
+        )
 
         context = _unwrap(admin_views.chair_information)('party-1')
 
     assert context['selected_filter'] == 'all'
     assert context['seat_urls_by_ticket_id'][entry.ticket_id] == (
         f'https://www.example.test/seating/areas/main#seat-{entry.seat_id}'
+    )
+
+
+@pytest.mark.parametrize(
+    ('primary_site_id', 'expected_server_name'),
+    [
+        ('preferred', 'z.example.test'),
+        (None, None),
+        ('unknown', None),
+        ('other-party', None),
+    ],
+)
+def test_seat_link_site_selection_with_multiple_sites(
+    monkeypatch, primary_site_id, expected_server_name
+):
+    party = SimpleNamespace(id='party-1', brand_id='brand-1')
+    sites = [
+        SimpleNamespace(
+            id='other-party',
+            party_id='party-2',
+            server_name='a.example.test',
+        ),
+        SimpleNamespace(
+            id='secondary',
+            party_id=party.id,
+            server_name='b.example.test',
+        ),
+        SimpleNamespace(
+            id='preferred',
+            party_id=party.id,
+            server_name='z.example.test',
+        ),
+    ]
+    monkeypatch.setattr(
+        admin_views.site_service, 'get_current_sites', lambda *_: sites
+    )
+    monkeypatch.setattr(
+        admin_views.party_setting_service,
+        'find_setting_value',
+        lambda *_: primary_site_id,
+    )
+
+    assert (
+        admin_views._find_site_server_name_for_party(party)
+        == expected_server_name
     )
 
 
@@ -582,3 +637,30 @@ def test_admin_export_escapes_formula_cells(app, monkeypatch, prefix):
     assert row[0] == f"'{entry.full_name}"
     assert row[1] == f"'{entry.screen_name}"
     assert row[3] == f"'{entry.seat_label}"
+
+
+@pytest.mark.parametrize('label', [None, ''])
+def test_export_distinguishes_unnamed_seat_from_no_seat(
+    app, monkeypatch, label
+):
+    entries = [
+        replace(_make_report_entry('T-1', True), seat_label=label),
+        _make_report_entry('T-2', False, has_seat=False),
+    ]
+    with app.test_request_context('/'):
+        g.user = StubUser(permissions=('seating.view',))
+        monkeypatch.setattr(
+            admin_views.party_service,
+            'find_party',
+            lambda *_: SimpleNamespace(id='party-1'),
+        )
+        monkeypatch.setattr(
+            admin_views.chair_optout_service,
+            'get_report_entries_for_party',
+            lambda *_: entries,
+        )
+        response = admin_views.export_as_csv('party-1')
+
+    rows = list(csv.reader(StringIO(response.get_data(as_text=True))))
+    assert rows[1][3] == 'unnamed'
+    assert rows[2][3] == 'no seat'

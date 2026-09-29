@@ -5,6 +5,7 @@
 from types import SimpleNamespace
 
 from flask_babel import gettext
+from markupsafe import escape
 
 from byceps.services.chair_optout import chair_optout_service
 from byceps.services.chair_optout.blueprints.admin import views
@@ -333,6 +334,53 @@ def test_stale_answer_does_not_highlight_seat(
     assert response.status_code == 200
     assert 'seat--occupied' in seat_markup
     assert 'seat--own-chair' not in seat_markup
+
+
+def test_graphical_plan_keeps_unlabeled_and_escaped_seats_intact(
+    chair_admin_client,
+    party,
+    make_user,
+    make_ticket_category,
+):
+    user = make_user(generate_token())
+    category = make_ticket_category(party.id, generate_token())
+    area = seating_area_service.create_area(
+        party.id,
+        generate_token(),
+        'Unlabeled seats',
+        image_filename='unlabeled.png',
+        image_width=320,
+        image_height=240,
+    )
+    seat = seat_service.create_seat(area.id, 10, 10, category.id, label=None)
+    special_label = '<img src=x onerror="alert(1)">'
+    special_seat = seat_service.create_seat(
+        area.id, 40, 40, category.id, label=special_label
+    )
+    ticket = ticket_creation_service.create_ticket(category, user, user=user)
+    ticket_seat_management_service.occupy_seat(
+        ticket.id, seat.id, user
+    ).unwrap()
+    chair_optout_service.set_optout(party.id, ticket.id, user.id, True)
+
+    response = chair_admin_client.get(
+        f'/chair_optout/for_party/{party.id}/chair_information/seating_plan'
+    )
+    html = response.get_data(as_text=True)
+    seat_tag = html.split(f'<div id="seat-{seat.id}"', 1)[1].split('>', 1)[0]
+    special_seat_tag = html.split(f'<div id="seat-{special_seat.id}"', 1)[
+        1
+    ].split('>', 1)[0]
+
+    assert response.status_code == 200
+    assert (
+        f'data-label="{_translate(chair_admin_client, "unnamed")}"' in seat_tag
+    )
+    assert f'data-ticket-id="{ticket.id}"' in seat_tag
+    assert 'data-tooltip-note=' in seat_tag
+    assert 'seat--own-chair' in html.split(seat_tag, 1)[1].split('</div>', 1)[0]
+    assert f'data-label="{escape(special_label)}"' in special_seat_tag
+    assert special_label not in special_seat_tag
 
 
 def _translate(client, message: str) -> str:

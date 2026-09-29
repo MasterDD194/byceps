@@ -182,14 +182,18 @@ def test_current_user_can_store_both_answers_without_seat(
     site_app, site, party, make_user, make_ticket_category
 ):
     participant = make_user(generate_token())
+    owner = make_user(generate_token())
     category = make_ticket_category(party.id, generate_token())
     ticket = ticket_creation_service.create_ticket(
-        category, participant, user=participant
+        category, owner, user=participant
     )
     log_in_user(participant.id)
     url = f'{BASE_URL}{ticket.id}'
 
     with http_client(site_app, user_id=participant.id) as client:
+        response = client.get(BASE_URL)
+        assert response.status_code == 200
+        assert ticket.code in response.get_data(as_text=True)
         own_response = client.post(url, data={f'{ticket.id}-choice': 'own'})
         provided_response = client.post(
             url, data={f'{ticket.id}-choice': 'provided'}
@@ -219,6 +223,54 @@ def test_ticket_owner_cannot_submit_for_current_participant(
 
     assert response.status_code == 403
     assert chair_optout_service.get_optout(party.id, ticket.id) is None
+
+
+@pytest.mark.parametrize('gv36_theme', [False, True])
+@pytest.mark.parametrize('invalid_choice', [None, 'invalid', 'wrong-ticket'])
+def test_invalid_submission_preserves_answers(
+    make_site_app,
+    site,
+    party,
+    make_user,
+    make_ticket_category,
+    gv36_theme,
+    invalid_choice,
+):
+    app = make_site_app('www.acmecon.test', site.id)
+    if gv36_theme:
+        app.jinja_loader = create_site_template_loader(
+            SiteID('totalverplant-36')
+        )
+
+    with app.app_context():
+        user = make_user(generate_token())
+        category = make_ticket_category(party.id, generate_token())
+        ticket = ticket_creation_service.create_ticket(
+            category, user, user=user
+        )
+        other_ticket = ticket_creation_service.create_ticket(
+            category, user, user=user
+        )
+        chair_optout_service.set_optout(party.id, ticket.id, user.id, True)
+        log_in_user(user.id)
+        data = {}
+        if invalid_choice == 'wrong-ticket':
+            data[f'{other_ticket.id}-choice'] = 'provided'
+        elif invalid_choice is not None:
+            data[f'{ticket.id}-choice'] = invalid_choice
+
+        with http_client(app, user_id=user.id) as client:
+            response = client.post(f'{BASE_URL}{ticket.id}', data=data)
+
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert f'id="ticket-{ticket.id}"' in html
+        assert f'id="ticket-{other_ticket.id}"' in html
+        answer = chair_optout_service.get_optout(party.id, ticket.id)
+        assert answer.brings_own_chair is True
+        assert (
+            chair_optout_service.get_optout(party.id, other_ticket.id) is None
+        )
 
 
 def _translate(app, message: str) -> str:

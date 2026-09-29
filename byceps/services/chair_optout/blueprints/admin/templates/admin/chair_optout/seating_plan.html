@@ -10,7 +10,7 @@
       {%- set has_chair_information = seat.occupied and seat.occupied_by_ticket_id in chair_information_by_ticket_id %}
       {%- set chair_information = chair_information_by_ticket_id.get(seat.occupied_by_ticket_id) %}
       {%- set brings_own_chair = has_chair_information and chair_information is sameas true %}
-      <div id="seat-{{ seat.id }}" class="seat-with-tooltip" style="left: {{ seat.coord_x }}px; top: {{ seat.coord_y }}px;" data-seat-id="{{ seat.id }}" data-label="{{ seat.label|fallback(_('unnamed')) }}"
+      <div id="seat-{{ seat.id }}" class="seat-with-tooltip" style="left: {{ seat.coord_x }}px; top: {{ seat.coord_y }}px;" data-seat-id="{{ seat.id }}" data-label="{{ seat.label or _('unnamed') }}"
         {%- if seat.occupied %}
         {{- ' ' }}data-ticket-id="{{ seat.occupied_by_ticket_id }}"
           {%- if seat.occupied_by_user %}
