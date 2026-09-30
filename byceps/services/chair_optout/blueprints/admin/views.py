@@ -11,10 +11,12 @@ from flask import abort, request
 from flask_babel import gettext
 
 from byceps.services.chair_optout import chair_optout_service
+from byceps.services.chair_optout.presentation import get_chair_source_label
 from byceps.services.party import party_service, party_setting_service
 from byceps.services.party.models import Party, PartyID
 from byceps.services.seating import seating_area_service, seat_service
 from byceps.services.site import site_service
+from byceps.services.ticketing.models.ticket import ChairSource
 from byceps.util.export import serialize_tuples_to_csv
 from byceps.util.framework.blueprint import create_blueprint
 from byceps.util.framework.templating import templated
@@ -23,9 +25,17 @@ from byceps.util.views import permission_required, textified
 
 
 blueprint = create_blueprint('chair_optout_admin', __name__)
+blueprint.add_app_template_global(get_chair_source_label, 'chair_source_label')
 
 _VALID_FILTERS = frozenset(
-    {'all', 'own_chair', 'provided_chair', 'not_specified', 'no_seat'}
+    {
+        'all',
+        'own_chair',
+        'provided_chair',
+        'rented_chair',
+        'not_specified',
+        'no_seat',
+    }
 )
 
 
@@ -71,21 +81,26 @@ def chair_information(party_id):
 def chair_information_seating_plan(party_id):
     """Show chair information on the party's graphical seating plans."""
     party = _get_party_or_404(party_id)
-    report_entries = chair_optout_service.get_report_entries_for_party(party.id)
+    chair_sources = chair_optout_service.get_chair_sources_for_party(party.id)
     areas_with_seats = [
         (area, seat_service.get_area_seats(area.id))
         for area in seating_area_service.get_areas_for_party(party.id)
     ]
-    chair_information_by_ticket_id = {
-        entry.ticket_id: entry.brings_own_chair for entry in report_entries
+    selected_filter = _get_selected_filter(include_no_seat=False)
+    matching_ticket_ids = {
+        ticket_id
+        for ticket_id, source in chair_sources.items()
+        if _matches_filter(source, True, selected_filter)
     }
 
     return {
         'party': party,
         'areas_with_seats': areas_with_seats,
-        'chair_information_by_ticket_id': chair_information_by_ticket_id,
+        'chair_sources_by_ticket_id': chair_sources,
+        'matching_ticket_ids': matching_ticket_ids,
+        'has_rented_chair': ChairSource.rental in chair_sources.values(),
         'seat_stylesheet_site_id': _find_seat_stylesheet_site_id(party.id),
-        'selected_filter': _get_selected_filter(),
+        'selected_filter': selected_filter,
     }
 
 
@@ -114,7 +129,7 @@ def export_as_csv(party_id):
             (entry.seat_label or gettext('unnamed'))
             if entry.has_seat
             else gettext('no seat'),
-            _get_status_label(entry.brings_own_chair),
+            get_chair_source_label(entry.chair_source),
         )
         for entry in report_entries
     ]
@@ -135,43 +150,37 @@ def _escape_csv_cell(value: str) -> str:
     )
 
 
-def _get_status_label(brings_own_chair: bool | None) -> str:
-    if brings_own_chair is True:
-        return gettext('Brings own chair')
-    if brings_own_chair is False:
-        return gettext('Needs a provided chair')
-    return gettext('Not specified yet')
-
-
-def _get_selected_filter() -> str:
+def _get_selected_filter(*, include_no_seat: bool = True) -> str:
     selected_filter = request.args.get('filter', 'all')
+    if not include_no_seat and selected_filter == 'no_seat':
+        return 'all'
     return selected_filter if selected_filter in _VALID_FILTERS else 'all'
 
 
 def _filter_report_entries(report_entries, selected_filter: str):
+    return [
+        entry
+        for entry in report_entries
+        if _matches_filter(entry.chair_source, entry.has_seat, selected_filter)
+    ]
+
+
+def _matches_filter(
+    source: ChairSource | None, has_seat: bool, selected_filter: str
+) -> bool:
     match selected_filter:
         case 'own_chair':
-            return [
-                entry
-                for entry in report_entries
-                if entry.brings_own_chair is True
-            ]
+            return source is ChairSource.user
         case 'provided_chair':
-            return [
-                entry
-                for entry in report_entries
-                if entry.brings_own_chair is False
-            ]
+            return source is ChairSource.venue
+        case 'rented_chair':
+            return source is ChairSource.rental
         case 'not_specified':
-            return [
-                entry
-                for entry in report_entries
-                if entry.brings_own_chair is None
-            ]
+            return source is None
         case 'no_seat':
-            return [entry for entry in report_entries if not entry.has_seat]
+            return not has_seat
         case _:
-            return list(report_entries)
+            return True
 
 
 def _find_seat_stylesheet_site_id(party_id: PartyID) -> str | None:

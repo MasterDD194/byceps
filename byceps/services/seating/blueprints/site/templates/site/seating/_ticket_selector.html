@@ -12,17 +12,6 @@
   <div class="block">{{ ngettext('You are managing seats of <strong>%(quantity)s</strong> ticket.', 'You are managing seats of <strong>%(quantity)s</strong> tickets.', managed_tickets_total, quantity=managed_tickets_total) }}</div>
   {%- endwith %}
 
-  {%- set chair_pending_ticket_id = chair_pending_ticket_id|default(none) %}
-  {%- if can_view_chair_information or chair_pending_ticket_id %}
-  <div class="block{% if chair_pending_ticket_id %} chair-prompt{% endif %}">
-    {%- if chair_pending_ticket_id %}
-    <span class="chair-prompt-kicker">{{ _('Chair information') }}</span>
-    <p class="chair-prompt-head">{{ _('Not specified yet') }}</p>
-    {%- endif %}
-    <a class="button chair-information-link" href="{{ url_for('chair_optout.index', _anchor='ticket-' ~ chair_pending_ticket_id) if chair_pending_ticket_id else url_for('chair_optout.index') }}">{{ render_icon('edit') }} <span>{{ _('Make selection') if chair_pending_ticket_id else _('Chair information') }}</span></a>
-  </div>
-  {%- endif %}
-
   <div class="row row--space-between is-vcentered">
     <div class="column--grow">
       <div class="ticket-selector button">

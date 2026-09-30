@@ -7,16 +7,17 @@ from types import SimpleNamespace
 from flask_babel import gettext
 from markupsafe import escape
 
-from byceps.services.chair_optout import chair_optout_service
 from byceps.services.chair_optout.blueprints.admin import views
 from byceps.services.party import party_setting_service
 from byceps.services.seating import seat_service, seating_area_service
 from byceps.services.site import site_service
 from byceps.services.ticketing import (
     ticket_creation_service,
+    ticket_revocation_service,
     ticket_seat_management_service,
     ticket_user_management_service,
 )
+from byceps.services.ticketing.models.ticket import ChairSource
 
 from tests.helpers import generate_token
 
@@ -175,6 +176,9 @@ def test_overview_and_csv_include_all_states_and_multiple_areas(
     third_seat = seat_service.create_seat(
         first_area.id, 31, 32, category.id, label='A-3'
     )
+    rental_seat = seat_service.create_seat(
+        second_area.id, 41, 42, category.id, label='B-4'
+    )
     own_ticket = ticket_creation_service.create_ticket(
         category, first_user, user=first_user
     )
@@ -190,6 +194,13 @@ def test_overview_and_csv_include_all_states_and_multiple_areas(
     unassigned_ticket = ticket_creation_service.create_ticket(
         category, first_user
     )
+    rental_ticket = ticket_creation_service.create_ticket(
+        category, second_user, user=second_user
+    )
+    revoked_ticket = ticket_creation_service.create_ticket(
+        category, first_user, user=first_user
+    )
+    ticket_revocation_service.revoke_ticket(revoked_ticket.id, first_user)
     ticket_seat_management_service.occupy_seat(
         own_ticket.id, first_seat.id, first_user
     ).unwrap()
@@ -199,15 +210,21 @@ def test_overview_and_csv_include_all_states_and_multiple_areas(
     ticket_seat_management_service.occupy_seat(
         unanswered_ticket.id, third_seat.id, third_user
     ).unwrap()
-    chair_optout_service.set_optout(
-        party.id, own_ticket.id, first_user.id, True
-    )
-    chair_optout_service.set_optout(
-        party.id, provided_ticket.id, second_user.id, False
-    )
-    chair_optout_service.set_optout(
-        party.id, own_no_seat_ticket.id, first_user.id, True
-    )
+    ticket_seat_management_service.occupy_seat(
+        rental_ticket.id, rental_seat.id, second_user
+    ).unwrap()
+    ticket_seat_management_service.set_chair_source(
+        own_ticket.id, ChairSource.user, first_user
+    ).unwrap()
+    ticket_seat_management_service.set_chair_source(
+        provided_ticket.id, ChairSource.venue, second_user
+    ).unwrap()
+    ticket_seat_management_service.set_chair_source(
+        own_no_seat_ticket.id, ChairSource.user, first_user
+    ).unwrap()
+    ticket_seat_management_service.set_chair_source(
+        rental_ticket.id, ChairSource.rental, second_user
+    ).unwrap()
 
     response = chair_admin_client.get(
         f'/chair_optout/for_party/{party.id}/chair_information'
@@ -220,13 +237,17 @@ def test_overview_and_csv_include_all_states_and_multiple_areas(
     assert unanswered_ticket.code in text
     assert own_no_seat_ticket.code in text
     assert unassigned_ticket.code not in text
+    assert revoked_ticket.code not in text
+    assert rental_ticket.code in text
+    assert 'filter=rented_chair' in text
+    assert _translate(chair_admin_client, 'rented') in text
     assert _translate(chair_admin_client, 'Brings own chair') in text
     assert _translate(chair_admin_client, 'Needs a provided chair') in text
     assert _translate(chair_admin_client, 'Not specified yet') in text
     assert _translate(chair_admin_client, 'no seat') in text
     assert 'First area' not in text
     assert text.count(f'href="/users/{first_user.id}"') == 2
-    assert text.count(f'href="/users/{second_user.id}"') == 1
+    assert text.count(f'href="/users/{second_user.id}"') == 2
     assert '<td>John Joseph Doe</td>' in text
     assert f'href="/ticketing/tickets/{own_ticket.id}"' in text
     assert (
@@ -246,6 +267,17 @@ def test_overview_and_csv_include_all_states_and_multiple_areas(
     assert own_ticket.code not in filtered_text
     assert 'filter=no_seat' in filtered_text
     assert 'tabs-tab--current' in filtered_text
+    assert 'chair_information/seating_plan?filter=all' in filtered_text
+    assert 'chair_information/seating_plan?filter=no_seat' not in filtered_text
+
+    rental_response = chair_admin_client.get(
+        f'/chair_optout/for_party/{party.id}/chair_information?filter=rented_chair'
+    )
+    rental_text = rental_response.get_data(as_text=True)
+    assert rental_response.status_code == 200
+    assert rental_ticket.code in rental_text
+    assert provided_ticket.code not in rental_text
+    assert own_ticket.code not in rental_text
 
     seating_response = chair_admin_client.get(
         f'/chair_optout/for_party/{party.id}/chair_information/seating_plan'
@@ -260,17 +292,22 @@ def test_overview_and_csv_include_all_states_and_multiple_areas(
         seat.id: seating_text.split(f'id="seat-{seat.id}"', 1)[1].split(
             '</div>', 1
         )[0]
-        for seat in (first_seat, second_seat, third_seat)
+        for seat in (first_seat, second_seat, third_seat, rental_seat)
     }
     assert 'seat--own-chair' in seat_markups[first_seat.id]
     assert 'seat--own-chair' not in seat_markups[second_seat.id]
     assert 'seat--own-chair' not in seat_markups[third_seat.id]
+    assert 'seat--chair-venue' in seat_markups[second_seat.id]
+    assert 'seat--chair-unknown' in seat_markups[third_seat.id]
+    assert 'seat--chair-rental' in seat_markups[rental_seat.id]
+    assert 'seat--filter-dimmed' not in seat_markups[first_seat.id]
     assert f'data-seat-id="{first_seat.id}"' in seating_text
     assert 'data-occupier-name=' in seating_text
     for chair_information in [
         'Brings own chair',
         'Needs a provided chair',
         'Not specified yet',
+        'rented',
     ]:
         assert (
             f'data-tooltip-note="{_translate(chair_admin_client, chair_information)}"'
@@ -284,6 +321,25 @@ def test_overview_and_csv_include_all_states_and_multiple_areas(
         in seating_text
     )
 
+    assert 'behavior/chair_optout.js' in seating_text
+    assert 'behavior/seating.js' not in seating_text
+    assert 'filter=no_seat' not in seating_text
+    legacy_plan = chair_admin_client.get(
+        f'/chair_optout/for_party/{party.id}/chair_information/seating_plan?filter=no_seat'
+    ).get_data(as_text=True)
+    assert 'seat--filter-dimmed' not in legacy_plan
+    assert 'filter=no_seat' not in legacy_plan
+    provided_plan = chair_admin_client.get(
+        f'/chair_optout/for_party/{party.id}/chair_information/seating_plan?filter=provided_chair'
+    ).get_data(as_text=True)
+    for seat in (first_seat, second_seat, third_seat, rental_seat):
+        markup = provided_plan.split(f'id="seat-{seat.id}"', 1)[1].split(
+            '</div>', 1
+        )[0]
+        assert ('seat--filter-dimmed' in markup) is (seat.id != second_seat.id)
+    assert 'left: 11px; top: 12px;' in provided_plan
+    assert 'rotate(45deg)' in provided_plan
+
     csv_response = chair_admin_client.get(
         f'/chair_optout/for_party/{party.id}/export.csv'
     )
@@ -294,9 +350,12 @@ def test_overview_and_csv_include_all_states_and_multiple_areas(
     assert _translate(chair_admin_client, 'Not specified yet') in csv_text
     assert _translate(chair_admin_client, 'no seat') in csv_text
     assert unassigned_ticket.code not in csv_text
+    assert revoked_ticket.code not in csv_text
+    assert rental_ticket.code in csv_text
+    assert _translate(chair_admin_client, 'rented') in csv_text
 
 
-def test_stale_answer_does_not_highlight_seat(
+def test_reassigned_ticket_source_does_not_highlight_seat(
     chair_admin_client,
     party,
     make_user,
@@ -320,7 +379,9 @@ def test_stale_answer_does_not_highlight_seat(
     ticket_seat_management_service.occupy_seat(
         ticket.id, seat.id, previous_user
     ).unwrap()
-    chair_optout_service.set_optout(party.id, ticket.id, previous_user.id, True)
+    ticket_seat_management_service.set_chair_source(
+        ticket.id, ChairSource.user, previous_user
+    ).unwrap()
     ticket_user_management_service.appoint_user(
         ticket.id, current_user, previous_user
     ).unwrap()
@@ -361,7 +422,9 @@ def test_graphical_plan_keeps_unlabeled_and_escaped_seats_intact(
     ticket_seat_management_service.occupy_seat(
         ticket.id, seat.id, user
     ).unwrap()
-    chair_optout_service.set_optout(party.id, ticket.id, user.id, True)
+    ticket_seat_management_service.set_chair_source(
+        ticket.id, ChairSource.user, user
+    ).unwrap()
 
     response = chair_admin_client.get(
         f'/chair_optout/for_party/{party.id}/chair_information/seating_plan'

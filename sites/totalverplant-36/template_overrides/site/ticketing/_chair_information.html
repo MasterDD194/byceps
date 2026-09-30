@@ -1,0 +1,18 @@
+<div class="field chair-information" data-chair-source="{{ ticket.chair_source.name if ticket.chair_source is not none else '' }}">
+  <div class="data-label">{{ _('Chair information') }}</div>
+  <div class="data-value">{{ chair_source_label(ticket.chair_source) }}</div>
+  {%- if ticket_management_enabled and can_edit_chair_information(ticket) %}
+  <div class="field-sub">
+    <span>{{ _('Change selection') if ticket.chair_source is not none else _('Make selection') }}</span>
+    <div class="dropdown">
+      <button class="dropdown-toggle button button--outline is-compact" aria-label="{{ _('Chair information') }}">{{ render_icon('chevron-down') }}</button>
+      <ol class="dropdown-menu dropdown-menu--right">
+        <li><a class="dropdown-item" href="{{ url_for('ticketing.set_chair_source', ticket_id=ticket.id, chair_source='user') }}" data-action="set-chair-source" data-chair-source="user">{{ _('I will bring my own chair') }}</a></li>
+        <li><a class="dropdown-item" href="{{ url_for('ticketing.set_chair_source', ticket_id=ticket.id, chair_source='venue') }}" data-action="set-chair-source" data-chair-source="venue">{{ _('I need a provided chair') }}</a></li>
+      </ol>
+    </div>
+  </div>
+  <p class="chair-update-success" role="status" hidden>{{ _('Chair source of ticket %(ticket_code)s has been set.', ticket_code=ticket.code) }}</p>
+  <p class="chair-update-error" role="alert" hidden>{{ _('An unexpected error occurred.') }}</p>
+  {%- endif %}
+</div>

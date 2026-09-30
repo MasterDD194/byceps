@@ -29,11 +29,6 @@ function init_seat_tooltips() {
           }
         }
 
-        const tooltipNote = dataset.tooltipNote;
-        if (tooltipNote !== undefined) {
-          tooltipHTML += '<div class="seat-tooltip-note">' + escape_html(tooltipNote) + '</div>';
-        }
-
         const tooltipNode = document.createElement('div');
         tooltipNode.classList.add('seat-tooltip');
         tooltipNode.innerHTML = tooltipHTML;

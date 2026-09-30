@@ -1,4 +1,4 @@
-// Browser regression tests for the shared tooltip used by the chair plan.
+// Browser regression tests for the module-local chair plan tooltip.
 // Run from the repository root; see the chair_optout README for the container command.
 const assert = require('node:assert/strict');
 const path = require('node:path');
@@ -18,8 +18,7 @@ const { chromium } = require('playwright');
     assert.equal(await page.locator('.seat').evaluate(el => el.offsetWidth), 11);
     await page.addStyleTag({ path: path.resolve('sites/totalverplant-36/static/style/seating.css') });
     assert.equal(await page.locator('.seat').evaluate(el => el.offsetWidth), 26);
-    await page.addScriptTag({ path: path.resolve('byceps/static/behavior/seating.js') });
-    await page.evaluate(() => init_seat_tooltips());
+    await page.addScriptTag({ path: path.resolve('byceps/services/chair_optout/blueprints/admin/static/behavior/chair_optout.js'), type: 'module' });
 
     // Flask integration tests cover rendering a None label as plain fallback
     // text. Here we cover the subsequent dataset -> tooltip DOM boundary.
@@ -48,7 +47,7 @@ const { chromium } = require('playwright');
       assert.equal(await page.locator('.seat-tooltip').count(), 0);
     }
     assert.deepEqual(errors, []);
-    console.log('PASS: tooltip escaping, participant/chair status, hover cleanup, default and GV36 seat sizes');
+    console.log('PASS: module-local tooltip escaping, participant/chair status, hover cleanup, default and GV36 seat sizes');
   } finally {
     await browser.close();
   }
