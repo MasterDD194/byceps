@@ -339,6 +339,20 @@ FK, the three `lan_tournaments` columns, the images index, then the table --
 irreversible: all image rows and every tournament's image link, alt text and
 creation token are lost; the files under `data/` stay on disk)
 
+### 019_add_tournament_category.sql
+
+Adds `lan_tournaments.category TEXT NOT NULL DEFAULT 'MAIN'`, guarded by
+`ck_lan_tournaments_category` (`MAIN`, `FUN`, `STAGE`, `USER_ORGANIZED`).
+On first application, existing request-derived tournaments are backfilled to
+`USER_ORGANIZED`; all others receive `MAIN`. Repeated application preserves
+category selections, including request-derived tournaments promoted to `MAIN`.
+Request provenance and category are independent. Positions remain unchanged.
+Apply after 018; `create_all()` does not migrate existing tables.
+
+**Rollback:** `rollback_019.sql` removes only the category constraint and
+column. Category selections are lost; tournaments, requests, provenance,
+positions, images, creation tokens and orga assignments are preserved.
+
 ## Pre-Application Checklist
 
 Before applying any migration, complete these steps:

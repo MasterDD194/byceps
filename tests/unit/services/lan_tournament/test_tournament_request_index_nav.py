@@ -26,6 +26,13 @@ from jinja2 import DictLoader, Environment, StrictUndefined
 from markupsafe import Markup
 import pytest
 
+from byceps.services.lan_tournament.lan_tournament_view_helpers import (
+    group_tournaments_by_category,
+)
+from byceps.services.lan_tournament.models.tournament_category import (
+    TournamentCategory,
+)
+
 
 _BASE_INDEX_TEMPLATE = pathlib.Path(
     'byceps/services/lan_tournament/blueprints/site/templates'
@@ -45,6 +52,13 @@ def _snippet(path: pathlib.Path) -> str:
 
 
 def _make_env(templates: dict[str, str]) -> Environment:
+    templates = {
+        'lan_tournament/_category_filter.html': pathlib.Path(
+            'byceps/services/core/blueprints/common/templates'
+            '/lan_tournament/_category_filter.html'
+        ).read_text(),
+        **templates,
+    }
     e = Environment(
         undefined=StrictUndefined,
         autoescape=True,
@@ -88,6 +102,9 @@ def _render_index(env, *, authenticated: bool, **ctx):
         'g': SimpleNamespace(user=SimpleNamespace(authenticated=authenticated)),
     }
     base_ctx.update(ctx)
+    base_ctx['tournament_groups'] = group_tournaments_by_category(
+        base_ctx['tournaments']
+    )
     return env.get_template('index').render(**base_ctx)
 
 
@@ -125,6 +142,8 @@ def test_index_nav_links_render_alongside_a_populated_tournament_list(
     tournament = SimpleNamespace(
         id='t-1',
         name='Cup',
+        category=TournamentCategory.MAIN,
+        position=0,
         game=None,
         image_url=None,
         tournament_status=None,

@@ -34,6 +34,7 @@ from .events import (
 )
 from .models.contestant_type import ContestantType
 from .models.tournament import Tournament, TournamentID
+from .models.tournament_category import TournamentCategory
 from .models.tournament_image import TournamentImageID
 from .models.score_ordering import ScoreOrdering
 from .models.game_format import GameFormat, is_valid_combination
@@ -155,6 +156,7 @@ def create_tournament(
     group_size_max: int | None = None,
     points_carry_to_losers: bool | None = None,
     position: int | None = None,
+    category: TournamentCategory | None = None,
     created_from_request_id: 'TournamentRequestID | None' = None,
     initiator_id: UserID | None = None,
     image_id: TournamentImageID | None = None,
@@ -171,6 +173,15 @@ def create_tournament(
     one without the other is a caller bug, not a user-facing error, so
     it raises rather than returning `Err`.
     """
+    if category is None:
+        category = (
+            TournamentCategory.USER_ORGANIZED
+            if created_from_request_id is not None
+            else TournamentCategory.MAIN
+        )
+    elif not isinstance(category, TournamentCategory):
+        return Err('Please choose a valid tournament category.')
+
     if created_from_request_id is not None:
         if initiator_id is None:
             raise ValueError(
@@ -248,6 +259,7 @@ def create_tournament(
         group_size_max=group_size_max,
         points_carry_to_losers=points_carry_to_losers,
         position=position,
+        category=category,
         created_from_request_id=created_from_request_id,
         image_id=image_id,
         image_alt_text=image_alt_text,
@@ -311,7 +323,11 @@ def create_tournament(
             tournament_repository.rollback_session()
             return Err(link_result.unwrap_err())
 
-        tournament_repository.commit_session()
+        try:
+            tournament_repository.commit_session()
+        except Exception:
+            tournament_repository.rollback_session()
+            raise
 
     signals.tournament_created.send(None, event=event)
 
@@ -322,6 +338,7 @@ def update_tournament(
     tournament_id: TournamentID,
     *,
     name: str,
+    category: TournamentCategory | None = None,
     game: str | None = None,
     description: str | None = None,
     image_url: str | None = None,
@@ -352,6 +369,9 @@ def update_tournament(
     changes must go through ``change_status`` to enforce the
     state machine.
     """
+    if category is not None and not isinstance(category, TournamentCategory):
+        return Err('Please choose a valid tournament category.')
+
     # Never store a NULL contestant type: derive it from team size
     # before validation, so the FFA/team cross-check below sees it too.
     contestant_type = tournament_domain_service.derive_contestant_type(
@@ -363,6 +383,8 @@ def update_tournament(
         return Err('Tournament name must not exceed 80 characters.')
 
     tournament = tournament_repository.get_tournament(tournament_id)
+    if category is None:
+        category = tournament.category
 
     # An unchanged URL (e.g. an uploaded image's relative served path)
     # stays valid without re-validation.
@@ -392,6 +414,8 @@ def update_tournament(
     # Reject structural changes while the tournament is in play.
     if tournament.tournament_status in EDIT_LOCKED_STATUSES:
         locked_changes: list[str] = []
+        if category != tournament.category:
+            locked_changes.append('category')
         if name != tournament.name:
             locked_changes.append('name')
         if game != tournament.game:
@@ -449,6 +473,7 @@ def update_tournament(
     updated = dataclasses.replace(
         tournament,
         name=name,
+        category=category,
         game=game,
         description=description,
         image_url=image_url,
@@ -478,7 +503,11 @@ def update_tournament(
         points_carry_to_losers=points_carry_to_losers,
     )
 
-    tournament_repository.update_tournament(updated)
+    try:
+        tournament_repository.update_tournament(updated)
+    except Exception:
+        tournament_repository.rollback_session()
+        raise
 
     event = TournamentUpdatedEvent(
         occurred_at=datetime.now(UTC),
@@ -657,7 +686,11 @@ def reorder_tournaments(
             f'for party {party_id}'
         )
 
-    tournament_repository.reorder_tournaments(tournament_ids)
+    try:
+        tournament_repository.reorder_tournaments(tournament_ids)
+    except Exception:
+        tournament_repository.rollback_session()
+        raise
 
 
 def get_tournaments_for_party(

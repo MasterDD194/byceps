@@ -40,6 +40,7 @@ from byceps.services.lan_tournament.lan_tournament_view_helpers import (
     build_round_robin_standings,
     build_seat_lookup,
     compute_feed_counts,
+    group_tournaments_by_category,
     is_ffa_tournament,
     is_walkover_match,
     parse_match_ids,
@@ -112,6 +113,7 @@ def index():
 
     return {
         'tournaments': visible_tournaments,
+        'tournament_groups': group_tournaments_by_category(visible_tournaments),
         'participant_counts': participant_counts,
         'team_counts': team_counts,
     }

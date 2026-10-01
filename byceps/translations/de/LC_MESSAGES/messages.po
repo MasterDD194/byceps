@@ -13861,3 +13861,22 @@ msgid "%(count)s file could not be deleted from disk."
 msgid_plural "%(count)s files could not be deleted from disk."
 msgstr[0] "%(count)s Datei konnte nicht vom Datenträger gelöscht werden."
 msgstr[1] "%(count)s Dateien konnten nicht vom Datenträger gelöscht werden."
+
+# lan_tournament: F-01 categories
+msgid "Tournament category"
+msgstr "Turnierkategorie"
+
+msgid "Main tournaments"
+msgstr "Hauptturniere"
+
+msgid "Fun tournaments"
+msgstr "Neben-/Funturniere"
+
+msgid "Stage / Offline"
+msgstr "Bühne / Offline"
+
+msgid "User Organized"
+msgstr "User Organized"
+
+msgid "Please choose a valid tournament category."
+msgstr "Bitte wähle eine gültige Turnierkategorie."

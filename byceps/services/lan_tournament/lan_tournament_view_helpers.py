@@ -34,6 +34,9 @@ from byceps.services.lan_tournament.models.tournament import (
     Tournament,
     TournamentID,
 )
+from byceps.services.lan_tournament.models.tournament_category import (
+    TournamentCategory,
+)
 from byceps.services.lan_tournament.models.tournament_match import (
     CorrectionCase,
     TournamentMatch,
@@ -71,6 +74,18 @@ from byceps.services.party.models import Party, PartyID
 from byceps.services.user import user_service
 from byceps.services.user.models import User, UserID
 from byceps.util.result import Err, Ok, Result
+
+
+def group_tournaments_by_category(
+    tournaments: list[Tournament],
+) -> dict[TournamentCategory, list[Tournament]]:
+    """Group loaded tournaments in category order, sorted only by position."""
+    groups: dict[TournamentCategory, list[Tournament]] = {
+        category: [] for category in TournamentCategory
+    }
+    for tournament in sorted(tournaments, key=lambda t: t.position):
+        groups[tournament.category].append(tournament)
+    return groups
 
 
 def build_contestant_name_lookups(
@@ -682,6 +697,7 @@ def parse_submitted_ffa_placements(
 CREATE_WIZARD_STEP_FIELDS: tuple[tuple[str, ...], ...] = (
     (
         'name',
+        'category',
         'game',
         'start_time',
         'description',
@@ -1309,6 +1325,10 @@ def build_create_wizard_strings() -> dict[str, str]:
             n='%(n)s',
         ),
         'Please enter a name.': gettext('Please enter a name.'),
+        'Tournament category': gettext('Tournament category'),
+        'Please choose a valid tournament category.': gettext(
+            'Please choose a valid tournament category.'
+        ),
         'Whole numbers from 1 only.': gettext('Whole numbers from 1 only.'),
         'Must be at least "%(other)s" (%(n)s).': gettext(
             'Must be at least "%(other)s" (%(n)s).'
