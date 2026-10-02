@@ -83,9 +83,10 @@ def render_fixtures():
     source_values = {
         'user': ChairSource.user,
         'venue': ChairSource.venue,
-        'unknown': None,
+        'unknown': ChairSource.unknown,
+        'rental': ChairSource.rental,
     }
-    pages, labels = {}, {}
+    pages, pages_rental_off, labels = {}, {}, {}
     with app.test_request_context('/tickets/mine'):
         g.user = participant
         g.party = SimpleNamespace(
@@ -110,18 +111,29 @@ def render_fixtures():
                     chair_source=source if index == 0 else ChairSource.venue,
                     get_seat_manager=lambda: participant,
                     get_user_manager=lambda: participant,
+                    is_used_by=lambda user_id: user_id == participant.id,
+                    is_user_managed_by=lambda user_id: (
+                        user_id == participant.id
+                    ),
                 )
                 for index, ticket_id in enumerate(TICKET_IDS)
             ]
-            pages[name] = app.jinja_env.get_template(
-                'site/ticketing/index_mine.html'
-            ).render(
-                tickets=tickets,
-                party_title='Fixture party',
-                current_user_uses_any_ticket=True,
-                ticket_management_enabled=True,
-                order_ids_by_order_number={},
-            )
+            for rental_enabled, target_pages in [
+                (True, pages),
+                (False, pages_rental_off),
+            ]:
+                app.jinja_env.globals['is_chair_rental_selection_enabled'] = (
+                    lambda _, enabled=rental_enabled: enabled
+                )
+                target_pages[name] = app.jinja_env.get_template(
+                    'site/ticketing/index_mine.html'
+                ).render(
+                    tickets=tickets,
+                    party_title='Fixture party',
+                    current_user_uses_any_ticket=True,
+                    ticket_management_enabled=True,
+                    order_ids_by_order_number={},
+                )
             labels[name] = chair_views.get_chair_source_label(source)
     with app.test_request_context('/tickets/mine'):
         flash_success(
@@ -135,6 +147,7 @@ def render_fixtures():
         ).render()
     return {
         'pages': pages,
+        'pagesRentalOff': pages_rental_off,
         'labels': labels,
         'ticketIds': [str(id_) for id_ in TICKET_IDS],
         'notification': notification,

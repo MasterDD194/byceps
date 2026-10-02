@@ -8,7 +8,7 @@ byceps.services.chair_optout.chair_optout_service
 from collections.abc import Sequence
 from typing import cast
 
-from sqlalchemy import select
+from sqlalchemy import or_, select
 
 from byceps.database import db
 from byceps.services.party.models import PartyID
@@ -44,7 +44,7 @@ def get_report_entries_for_party(
 
 def get_chair_sources_for_party(
     party_id: PartyID,
-) -> dict[TicketID, ChairSource | None]:
+) -> dict[TicketID, ChairSource]:
     """Return chair sources without loading report users or seats."""
     rows = db.session.execute(
         select(DbTicket.id, DbTicket.__table__.c.chair_source).where(
@@ -54,7 +54,7 @@ def get_chair_sources_for_party(
         )
     ).all()
     return {
-        ticket_id: ChairSource.__members__.get(source)
+        ticket_id: ChairSource.__members__.get(source, ChairSource.unknown)
         for ticket_id, source in rows
     }
 
@@ -62,16 +62,27 @@ def get_chair_sources_for_party(
 def get_pending_chair_ticket_ids_for_user(
     party_id: PartyID, user_id: UserID
 ) -> list[TicketID]:
-    """Return unanswered, active, unchecked-in tickets used by the user."""
+    """Return unanswered, active, unchecked-in tickets the user may edit."""
     return list(
         db.session.scalars(
             select(DbTicket.id)
             .where(
                 DbTicket.party_id == party_id,
-                DbTicket.used_by_id == user_id,
+                DbTicket.used_by_id.is_not(None),
+                or_(
+                    DbTicket.used_by_id == user_id,
+                    DbTicket.user_managed_by_id == user_id,
+                    (DbTicket.user_managed_by_id.is_(None))
+                    & (DbTicket.owned_by_id == user_id),
+                ),
                 DbTicket.revoked.is_(False),
                 DbTicket.user_checked_in.is_(False),
-                DbTicket.__table__.c.chair_source.is_(None),
+                or_(
+                    DbTicket.__table__.c.chair_source.is_(None),
+                    DbTicket.__table__.c.chair_source.not_in(
+                        ['user', 'venue', 'rental']
+                    ),
+                ),
             )
             .order_by(DbTicket.code)
         ).all()
@@ -93,7 +104,8 @@ def summarize_report_entries(
             entry.chair_source is ChairSource.rental for entry in report_entries
         ),
         not_specified=sum(
-            entry.chair_source is None for entry in report_entries
+            entry.chair_source is ChairSource.unknown
+            for entry in report_entries
         ),
         no_seat=sum(not entry.has_seat for entry in report_entries),
     )

@@ -12,22 +12,24 @@ let failNextSave = false;
 let pendingFlash = false;
 let getCount = 0;
 let postCount = 0;
+let rentalEnabled = false;
 
 const server = http.createServer((request, response) => {
   const url = new URL(request.url, 'http://localhost');
   if (url.pathname === '/tickets/mine' && request.method === 'GET') {
     getCount += 1;
     response.writeHead(200, {'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store'});
-    response.end(fixture.pages[source].replace('<!-- save-result -->', pendingFlash ? fixture.notification : ''));
+    const pages = rentalEnabled ? fixture.pages : fixture.pagesRentalOff;
+    response.end(pages[source].replace('<!-- save-result -->', pendingFlash ? fixture.notification : ''));
     pendingFlash = false;
     return;
   }
   if (request.method === 'POST') {
     postCount += 1;
-    const match = url.pathname.match(/^\/tickets\/tickets\/([^/]+)\/chair_source\/(user|venue)$/);
+    const match = url.pathname.match(/^\/tickets\/tickets\/([^/]+)\/chair_source\/(user|venue|rental)$/);
     assert.ok(match, 'Choice must use the real Core URL');
     assert.equal(match[1], fixture.ticketIds[0]);
-    if (failNextSave) {
+    if (failNextSave || (match[2] === 'rental' && !rentalEnabled)) {
       failNextSave = false;
       response.writeHead(403);
     } else {
@@ -62,7 +64,8 @@ const server = http.createServer((request, response) => {
   const browser = await chromium.launch({headless: true});
   try {
     for (const theme of ['light', 'dark']) {
-      for (const width of [1280, 390]) {
+      for (const [width, enabled] of [[1280, false], [1280, true], [390, false], [390, true]]) {
+        rentalEnabled = enabled;
         source = 'unknown';
         failNextSave = false;
         pendingFlash = false;
@@ -81,7 +84,8 @@ const server = http.createServer((request, response) => {
         await page.waitForLoadState('networkidle');
         const field = () => page.locator('#ticket-' + fixture.ticketIds[0] + ' .chair-information');
         assert.equal(await field().locator('.data-value').textContent(), fixture.labels.unknown);
-        assert.equal(await field().locator('[data-action="set-chair-source"]').count(), 2);
+        assert.equal(await field().locator('[data-action="set-chair-source"]').count(), enabled ? 3 : 2);
+        assert.equal(await field().getAttribute('data-chair-source'), 'unknown');
         assert.equal(await field().locator('a[href$="/chair_source/unknown"]').count(), 0);
 
         // The last option must be clickable even over the next card/footer.
@@ -153,11 +157,25 @@ const server = http.createServer((request, response) => {
         assert.equal(await page.locator('.bote-notices').count(), 0, 'The consumed flash must not reappear after reload');
         await field().locator('.dropdown-toggle').click();
         assert.equal(await field().locator('.dropdown-menu').isVisible(), true, 'The menu must still open after reload');
+        if (enabled) {
+          await field().locator('a[href$="/chair_source/rental"]').click();
+          await field().locator('.chair-update-success').waitFor({state: 'visible'});
+          assert.equal(await field().locator('.data-value').textContent(), fixture.labels.rental);
+          assert.equal(await field().getAttribute('data-chair-source'), 'rental');
+          const postsBeforeDuplicate = postCount;
+          await field().locator('.dropdown-toggle').click();
+          await field().locator('a[href$="/chair_source/rental"]').click();
+          assert.equal(postCount, postsBeforeDuplicate, 'Repeated rental selection must not write again');
+          rentalEnabled = false;
+          await page.reload();
+          assert.equal(await field().locator('.data-value').textContent(), fixture.labels.rental);
+          assert.equal(await field().locator('a[href$="/chair_source/rental"]').count(), 0);
+        }
         assert.deepEqual(errors, []);
         await page.close();
       }
     }
-    console.log('PASS: legacy markup compatibility, repeated chair choices, dropdown layering, light/dark desktop/mobile, inline confirmation without navigation, failed-save retry and persistence after reload');
+    console.log('PASS: rental OFF/ON and retained rental answers, unknown DOM state, legacy markup compatibility, repeated chair choices, dropdown layering, light/dark desktop/mobile, inline confirmation without navigation, failed-save retry and persistence after reload');
   } finally {
     await browser.close();
     server.close();

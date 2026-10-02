@@ -78,6 +78,7 @@ def test_admin_views_require_seating_view(app):
             views.index,
             views.chair_information,
             views.chair_information_seating_plan,
+            views.rental_selection,
             views.export_as_csv,
         ):
             with pytest.raises(Forbidden):
@@ -102,11 +103,12 @@ def test_report_filters_preserve_full_summary(
     entries = [
         _make_entry('T-1', ChairSource.user),
         _make_entry('T-2', ChairSource.venue),
-        _make_entry('T-3', None, has_seat=False),
+        _make_entry('T-3', ChairSource.unknown, has_seat=False),
         _make_entry('T-4', ChairSource.user, has_seat=False),
         _make_entry('T-5', ChairSource.rental, has_seat=False),
     ]
     _prepare_report(monkeypatch, entries)
+    app.config['LOCALE'] = 'en'
     with app.test_request_context(f'/?filter={selected_filter}'):
         context = _unwrap(views.chair_information)('party-1')
 
@@ -141,7 +143,7 @@ def test_plan_uses_compact_query_and_preserves_all_seats(
         0: ChairSource.user,
         1: ChairSource.venue,
         2: ChairSource.rental,
-        3: None,
+        3: ChairSource.unknown,
     }
     areas = [SimpleNamespace(id='first'), SimpleNamespace(id='second')]
     monkeypatch.setattr(
@@ -174,6 +176,11 @@ def test_plan_uses_compact_query_and_preserves_all_seats(
     monkeypatch.setattr(
         views, '_find_seat_stylesheet_site_id', lambda _: 'site-1'
     )
+    monkeypatch.setattr(
+        views.chair_setting_service,
+        'is_rental_selection_enabled',
+        lambda _: False,
+    )
     with app.test_request_context(f'/?filter={selected_filter}'):
         context = _unwrap(views.chair_information_seating_plan)('party-1')
 
@@ -186,7 +193,7 @@ def test_plan_uses_compact_query_and_preserves_all_seats(
     assert context['selected_filter'] == (
         'all' if selected_filter == 'no_seat' else selected_filter
     )
-    assert context['has_rented_chair'] is True
+    assert context['show_rental_information'] is True
     assert context['seat_stylesheet_site_id'] == 'site-1'
 
 
@@ -194,7 +201,7 @@ def test_seat_urls_use_https_and_escape_area_slug():
     entry = replace(
         _make_entry('T-1', ChairSource.user), seat_area_slug='hall /?#'
     )
-    no_seat = _make_entry('T-2', None, has_seat=False)
+    no_seat = _make_entry('T-2', ChairSource.unknown, has_seat=False)
     assert views._build_seat_urls_by_ticket_id(
         [entry, no_seat], 'www.example.test'
     ) == {
@@ -323,7 +330,7 @@ def test_export_includes_distinct_sources_and_no_seat(app, monkeypatch):
         _make_entry('T-1', ChairSource.user),
         _make_entry('T-2', ChairSource.venue),
         _make_entry('T-3', ChairSource.rental),
-        _make_entry('T-4', None, has_seat=False),
+        _make_entry('T-4', ChairSource.unknown, has_seat=False),
     ]
     rows = _export(app, monkeypatch, entries)
     assert rows[0] == [
@@ -381,7 +388,7 @@ def test_export_distinguishes_unnamed_seat_from_no_seat(
         (ChairSource.user, 'Brings own chair'),
         (ChairSource.venue, 'Needs a provided chair'),
         (ChairSource.rental, 'rented'),
-        (None, 'Not specified yet'),
+        (ChairSource.unknown, 'Not specified yet'),
     ],
 )
 def test_shared_chair_source_label(app, source, label):
@@ -431,7 +438,7 @@ def chair_template_app():
 def render_plan(chair_template_app):
     app = chair_template_app
 
-    def render(sources, *, selected_filter='all'):
+    def render(sources, *, selected_filter='all', rental_enabled=False):
         seats = [
             SimpleNamespace(
                 id=ticket_id,
@@ -480,7 +487,9 @@ def render_plan(chair_template_app):
                     for ticket_id, source in sources.items()
                     if views._matches_filter(source, True, selected_filter)
                 },
-                has_rented_chair=ChairSource.rental in sources.values(),
+                show_rental_information=(
+                    rental_enabled or ChairSource.rental in sources.values()
+                ),
                 selected_filter=selected_filter,
                 seat_stylesheet_site_id='site-1',
             )
@@ -494,14 +503,14 @@ def test_plan_renders_seat_specific_markers_tooltips_and_geometry(render_plan):
             1: ChairSource.user,
             2: ChairSource.venue,
             3: ChairSource.rental,
-            4: None,
+            4: ChairSource.unknown,
         },
         selected_filter='provided_chair',
     )
     markers = {
         1: ('seat--own-chair', 'Brings own chair'),
         2: ('seat--chair-venue', 'Needs a provided chair'),
-        3: ('seat--chair-rental', 'rented'),
+        3: ('seat--chair-rental', 'Rental chair'),
         4: ('seat--chair-unknown', 'Not specified yet'),
     }
     for seat_id, (marker, note) in markers.items():
@@ -531,7 +540,7 @@ def test_plan_renders_seat_specific_markers_tooltips_and_geometry(render_plan):
 
 
 def test_plan_hides_rental_filter_and_legend_without_rentals(render_plan):
-    html = render_plan({1: ChairSource.user, 2: None})
+    html = render_plan({1: ChairSource.user, 2: ChairSource.unknown})
     assert 'filter=rented_chair' not in html
     assert 'seat--chair-rental' not in html
     assert 'seat--filter-dimmed' not in html
@@ -539,8 +548,9 @@ def test_plan_hides_rental_filter_and_legend_without_rentals(render_plan):
 
 
 @pytest.mark.parametrize('has_rental', [False, True])
+@pytest.mark.parametrize('rental_enabled', [False, True])
 def test_report_rental_card_and_filter_use_unfiltered_records(
-    chair_template_app, has_rental
+    chair_template_app, has_rental, rental_enabled
 ):
     entries = [_make_entry('T-1', ChairSource.user)]
     if has_rental:
@@ -549,6 +559,7 @@ def test_report_rental_card_and_filter_use_unfiltered_records(
     with chair_template_app.test_request_context(
         '/chair_optout/for_party/party-1/chair_information'
     ):
+        g.user = SimpleNamespace(has_permission=lambda _: False)
         html = render_template(
             'admin/chair_optout/index.html',
             party=SimpleNamespace(id='party-1', title='Party'),
@@ -556,9 +567,29 @@ def test_report_rental_card_and_filter_use_unfiltered_records(
             summary=summary,
             selected_filter='no_seat',
             seat_urls_by_ticket_id={},
+            show_rental_information=rental_enabled or has_rental,
         )
-    assert ('<figcaption>rented</figcaption>' in html) is has_rental
-    assert ('filter=rented_chair' in html) is has_rental
+    assert ('<figcaption>Rental chair</figcaption>' in html) is has_rental
+    assert ('filter=rented_chair' in html) is (rental_enabled or has_rental)
+    assert 'name="enabled"' not in html
+    assert 'Existing rental information' not in html
     assert 'filter=no_seat' in html
     assert 'chair_information/seating_plan?filter=all' in html
     assert 'chair_information/seating_plan?filter=no_seat' not in html
+
+
+@pytest.mark.parametrize('has_rental', [False, True])
+@pytest.mark.parametrize('rental_enabled', [False, True])
+def test_plan_rental_visibility_matrix(render_plan, has_rental, rental_enabled):
+    sources = {1: ChairSource.user}
+    if has_rental:
+        sources[2] = ChairSource.rental
+    html = render_plan(
+        sources, rental_enabled=rental_enabled, selected_filter='rented_chair'
+    )
+    visible = rental_enabled or has_rental
+    filters = html.split('<nav class="main-tabs">', 1)[1].split('</nav>', 1)[0]
+    assert ('filter=rented_chair' in filters) is visible
+    assert ('seat--chair-rental" aria-hidden="true"' in html) is visible
+    assert ('data-chair-source="rental"' in html) is has_rental
+    assert 'seat--filter-dimmed' in html

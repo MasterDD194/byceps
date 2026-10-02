@@ -22,7 +22,7 @@ class ChairOptoutReportEntry:
     seat_area_slug: str | None
     seat_label: str | None
     has_seat: bool
-    chair_source: ChairSource | None
+    chair_source: ChairSource
 
 
 @dataclass(frozen=True, kw_only=True)

@@ -34,6 +34,8 @@ def ticket_rows(monkeypatch):
         Column('party_id', String),
         Column('code', String),
         Column('used_by_id', Uuid),
+        Column('owned_by_id', Uuid),
+        Column('user_managed_by_id', Uuid),
         Column('revoked', Boolean),
         Column('user_checked_in', Boolean),
         Column('chair_source', String),
@@ -48,6 +50,8 @@ def ticket_rows(monkeypatch):
                 party_id='party-1',
                 code='T-1',
                 used_by_id=user_id,
+                owned_by_id=generate_uuid(),
+                user_managed_by_id=None,
                 revoked=False,
                 user_checked_in=False,
                 chair_source=source.name if source else None,
@@ -69,6 +73,8 @@ def test_compact_sources_include_all_states_and_only_eligible_tickets(
     venue = insert(source=ChairSource.venue)
     rental = insert(source=ChairSource.rental)
     pending = insert()
+    unknown = insert(source=ChairSource.unknown)
+    invalid = insert(chair_source='invalid')
     checked_in = insert(source=ChairSource.user, user_checked_in=True)
     insert(source=ChairSource.user, revoked=True)
     insert(source=ChairSource.rental, used_by_id=None)
@@ -78,12 +84,14 @@ def test_compact_sources_include_all_states_and_only_eligible_tickets(
         own: ChairSource.user,
         venue: ChairSource.venue,
         rental: ChairSource.rental,
-        pending: None,
+        pending: ChairSource.unknown,
+        unknown: ChairSource.unknown,
+        invalid: ChairSource.unknown,
         checked_in: ChairSource.user,
     }
 
 
-def test_pending_tickets_require_raw_null_and_current_unchecked_in_user(
+def test_pending_tickets_include_unknown_null_invalid_and_current_permissions(
     ticket_rows,
 ):
     insert, user_id = ticket_rows
@@ -92,17 +100,32 @@ def test_pending_tickets_require_raw_null_and_current_unchecked_in_user(
     insert(revoked=True)
     insert(user_checked_in=True)
     insert(used_by_id=None)
+    insert(used_by_id=None, owned_by_id=user_id)
     insert(used_by_id=generate_uuid())
     insert(party_id='other-party')
-    for source in ChairSource:
+    for source in [ChairSource.user, ChairSource.venue, ChairSource.rental]:
         insert(source=source)
-    insert(chair_source='unrecognized-source')
+    unknown = insert(source=ChairSource.unknown, code='T-3')
+    invalid = insert(chair_source='unrecognized-source', code='T-4')
+    managed = insert(
+        used_by_id=generate_uuid(), user_managed_by_id=user_id, code='T-5'
+    )
+    owned = insert(used_by_id=generate_uuid(), owned_by_id=user_id, code='T-6')
+    insert(
+        used_by_id=generate_uuid(),
+        owned_by_id=user_id,
+        user_managed_by_id=generate_uuid(),
+    )
 
     assert service.get_pending_chair_ticket_ids_for_user(
         'party-1', user_id
     ) == [
         first,
         second,
+        unknown,
+        invalid,
+        managed,
+        owned,
     ]
 
 
@@ -128,7 +151,7 @@ def test_report_uses_current_user_seat_and_core_source(monkeypatch):
                 ChairSource.user,
                 ChairSource.venue,
                 ChairSource.rental,
-                None,
+                ChairSource.unknown,
                 ChairSource.rental,
             ]
         )

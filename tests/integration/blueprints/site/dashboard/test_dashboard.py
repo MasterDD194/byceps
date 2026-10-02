@@ -71,9 +71,12 @@ def test_gv36_chair_coupon_tracks_multiple_unanswered_tickets_and_reset(
         other_ticket = ticket_creation_service.create_ticket(
             category, participant, user=participant
         )
-        ticket_creation_service.create_ticket(
+        borrowed_ticket = ticket_creation_service.create_ticket(
             category, participant, user=borrowed_ticket_user
         )
+        ticket_user_management_service.appoint_user_manager(
+            borrowed_ticket.id, borrowed_ticket_user, participant
+        ).unwrap()
         log_in_user(participant.id)
         log_in_user(no_ticket_user.id)
         log_in_user(borrowed_ticket_user.id)

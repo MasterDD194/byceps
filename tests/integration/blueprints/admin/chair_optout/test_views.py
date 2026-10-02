@@ -6,7 +6,9 @@ from types import SimpleNamespace
 
 from flask_babel import gettext
 from markupsafe import escape
+import pytest
 
+from byceps.services.chair_optout import chair_setting_service
 from byceps.services.chair_optout.blueprints.admin import views
 from byceps.services.party import party_setting_service
 from byceps.services.seating import seat_service, seating_area_service
@@ -19,7 +21,7 @@ from byceps.services.ticketing import (
 )
 from byceps.services.ticketing.models.ticket import ChairSource
 
-from tests.helpers import generate_token
+from tests.helpers import generate_token, log_in_user
 
 
 def test_seat_management_requires_seating_view(
@@ -32,6 +34,15 @@ def test_seat_management_requires_seating_view(
 
     response = unauthorized_chair_admin_client.get(
         f'/chair_optout/for_party/{party.id}/chair_information/seating_plan'
+    )
+    assert response.status_code == 403
+
+
+def test_rental_selection_requires_seating_view(
+    unauthorized_chair_admin_client, party
+):
+    response = unauthorized_chair_admin_client.get(
+        f'/chair_optout/for_party/{party.id}/chair_information/rental_selection'
     )
     assert response.status_code == 403
 
@@ -307,7 +318,7 @@ def test_overview_and_csv_include_all_states_and_multiple_areas(
         'Brings own chair',
         'Needs a provided chair',
         'Not specified yet',
-        'rented',
+        'Rental chair',
     ]:
         assert (
             f'data-tooltip-note="{_translate(chair_admin_client, chair_information)}"'
@@ -444,6 +455,168 @@ def test_graphical_plan_keeps_unlabeled_and_escaped_seats_intact(
     assert 'seat--own-chair' in html.split(seat_tag, 1)[1].split('</div>', 1)[0]
     assert f'data-label="{escape(special_label)}"' in special_seat_tag
     assert special_label not in special_seat_tag
+
+
+def test_rental_switch_requires_write_permission(chair_admin_client, party):
+    url = (
+        f'/chair_optout/for_party/{party.id}/chair_information/rental_selection'
+    )
+    response = chair_admin_client.post(url, data={'enabled': 'true'})
+    assert response.status_code == 403
+    assert not chair_setting_service.is_rental_selection_enabled(party.id)
+    response = chair_admin_client.get(url)
+    assert response.status_code == 200
+    html = response.get_data(as_text=True)
+    assert _translate(chair_admin_client, 'Rental chair selection') in html
+    assert 'name="enabled"' not in html
+    assert 'data-rental-selection-form' not in html
+    assert _translate(chair_admin_client, 'OFF') in html
+
+
+@pytest.mark.parametrize('invalid', ['invalid', '', None])
+def test_rental_switch_validation_preserves_setting(
+    admin_app, make_admin, make_client, party, invalid
+):
+    admin = make_admin({'admin.access', 'seating.view', 'party.update'})
+    log_in_user(admin.id)
+    client = make_client(admin_app, user_id=admin.id)
+    response = client.post(
+        f'/chair_optout/for_party/{party.id}/chair_information/rental_selection',
+        data={'enabled': invalid} if invalid is not None else {},
+    )
+    assert response.status_code == 400
+    assert not chair_setting_service.is_rental_selection_enabled(party.id)
+
+
+def test_rental_switch_is_party_local_and_keeps_reports(
+    admin_app,
+    make_admin,
+    make_client,
+    party,
+    brand,
+    make_party,
+    make_user,
+    make_ticket_category,
+):
+    admin = make_admin({'admin.access', 'seating.view', 'party.update'})
+    log_in_user(admin.id)
+    client = make_client(admin_app, user_id=admin.id)
+    other_party = make_party(brand)
+    participant = make_user(generate_token())
+    category = make_ticket_category(party.id, generate_token())
+    ticket = ticket_creation_service.create_ticket(
+        category, participant, user=participant
+    )
+    url = (
+        f'/chair_optout/for_party/{party.id}/chair_information/rental_selection'
+    )
+    try:
+        list_html = client.get(
+            f'/chair_optout/for_party/{party.id}/chair_information'
+        ).get_data(as_text=True)
+        assert 'name="enabled"' not in list_html
+        html = client.get(url).get_data(as_text=True)
+        assert 'name="enabled"' in html
+        assert 'data-enabled="false"' in html
+        response = client.post(url, data={'enabled': 'true'})
+        assert response.status_code == 302
+        assert response.location.endswith(url)
+        assert chair_setting_service.is_rental_selection_enabled(party.id)
+        assert not chair_setting_service.is_rental_selection_enabled(
+            other_party.id
+        )
+        ticket_seat_management_service.set_chair_source(
+            ticket.id, ChairSource.rental, participant
+        ).unwrap()
+        assert client.post(url, data={'enabled': 'false'}).status_code == 302
+        assert not chair_setting_service.is_rental_selection_enabled(party.id)
+        for suffix in ['chair_information?filter=rented_chair', 'export.csv']:
+            response = client.get(
+                f'/chair_optout/for_party/{party.id}/{suffix}'
+            )
+            assert response.status_code == 200
+            assert ticket.code in response.get_data(as_text=True)
+            assert _translate(client, 'rented') in response.get_data(
+                as_text=True
+            )
+    finally:
+        chair_setting_service.set_rental_selection_enabled(party.id, False)
+
+
+@pytest.mark.parametrize('enabled', [False, True])
+@pytest.mark.parametrize('has_rental', [False, True])
+def test_rental_visibility_matrix(
+    chair_admin_client,
+    brand,
+    make_party,
+    make_user,
+    make_ticket_category,
+    enabled,
+    has_rental,
+):
+    party = make_party(brand)
+    participant = make_user(generate_token())
+    category = make_ticket_category(party.id, generate_token())
+    area = seating_area_service.create_area(
+        party.id,
+        generate_token(),
+        'Rental matrix',
+        image_filename='matrix.png',
+        image_width=320,
+        image_height=240,
+    )
+    seat = seat_service.create_seat(area.id, 10, 20, category.id, rotation=45)
+    ticket = ticket_creation_service.create_ticket(
+        category, participant, user=participant
+    )
+    ticket_seat_management_service.occupy_seat(
+        ticket.id, seat.id, participant
+    ).unwrap()
+    if has_rental:
+        ticket_seat_management_service.set_chair_source(
+            ticket.id, ChairSource.rental, participant
+        ).unwrap()
+    chair_setting_service.set_rental_selection_enabled(party.id, enabled)
+    visible = enabled or has_rental
+    base = f'/chair_optout/for_party/{party.id}/chair_information'
+    for suffix in ['', '/seating_plan']:
+        response = chair_admin_client.get(base + suffix)
+        assert response.status_code == 200
+        html = response.get_data(as_text=True)
+        assert ('filter=rented_chair' in html) is visible
+        assert 'name="enabled"' not in html
+        for tab in [
+            'Participant list',
+            'Graphical seating plan',
+            'Rental chair selection',
+        ]:
+            assert _translate(chair_admin_client, tab) in html
+        filtered = chair_admin_client.get(
+            base + suffix + '?filter=rented_chair'
+        ).get_data(as_text=True)
+        if suffix:
+            assert ('seat--chair-rental" aria-hidden="true"' in html) is visible
+            markup = html.split(f'id="seat-{seat.id}"', 1)[1].split(
+                '</div>', 1
+            )[0]
+            assert ('seat--chair-rental' in markup) is has_rental
+            filtered_markup = filtered.split(f'id="seat-{seat.id}"', 1)[
+                1
+            ].split('</div>', 1)[0]
+            assert ('seat--filter-dimmed' in filtered_markup) is not has_rental
+            assert 'rotate(45deg)' in markup
+        else:
+            assert (ticket.code in filtered) is has_rental
+        assert ticket.code in chair_admin_client.get(base).get_data(
+            as_text=True
+        )
+
+
+def test_rental_selection_unknown_party(chair_admin_client):
+    response = chair_admin_client.get(
+        '/chair_optout/for_party/does-not-exist/chair_information/rental_selection'
+    )
+    assert response.status_code == 404
 
 
 def _translate(client, message: str) -> str:

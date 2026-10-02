@@ -160,9 +160,7 @@ def enable_ticket_management(admin_app, party):
     db.session.commit()
 
 
-@pytest.mark.parametrize(
-    'source', [ChairSource.user, ChairSource.venue, ChairSource.rental, None]
-)
+@pytest.mark.parametrize('source', list(ChairSource))
 @pytest.mark.parametrize('state', ['checked_in', 'disabled'])
 def test_gv36_own_profile_displays_inactive_state_without_action(
     make_site_app,
@@ -199,7 +197,7 @@ def test_gv36_own_profile_displays_inactive_state_without_action(
         ChairSource.user: 'Brings own chair',
         ChairSource.venue: 'Needs a provided chair',
         ChairSource.rental: 'rented',
-        None: 'Not specified yet',
+        ChairSource.unknown: 'Not specified yet',
     }[source]
     html = response.get_data(as_text=True)
     assert response.status_code == 200

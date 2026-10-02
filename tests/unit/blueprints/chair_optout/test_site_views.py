@@ -2,6 +2,7 @@
 :License: Revised BSD (see `LICENSE` file for details)
 """
 
+from datetime import datetime
 from types import SimpleNamespace
 
 from flask import Flask, g, url_for
@@ -12,6 +13,7 @@ import pytest
 from byceps.services.chair_optout.blueprints.site import views
 from byceps.services.site.models import SiteID
 from byceps.services.ticketing.blueprints.site import views as ticketing_views
+from byceps.services.ticketing.dbmodels.ticket import DbTicket
 from byceps.services.ticketing.models.ticket import ChairSource
 from byceps.util.templating import create_site_template_loader
 
@@ -93,8 +95,12 @@ def test_chair_editability_uses_participant_and_core_conditions(app, state):
         _set_request_user_and_party(
             authenticated=state != 'anonymous', enabled=state != 'disabled'
         )
-        ticket = SimpleNamespace(
-            party_id=g.party.id,
+        ticket = DbTicket(
+            generate_uuid(),
+            datetime(2026, 1, 1),
+            SimpleNamespace(id=generate_uuid(), party_id=g.party.id),
+            'FIXTURE',
+            generate_uuid(),
             used_by_id=g.user.id,
             revoked=state == 'revoked',
             user_checked_in=state == 'checked_in',
@@ -105,9 +111,7 @@ def test_chair_editability_uses_participant_and_core_conditions(app, state):
             ticket.party_id = 'other-party'
         elif state == 'foreign_user':
             ticket.used_by_id = generate_uuid()
-            ticket.owned_by_id = g.user.id
             ticket.seat_managed_by_id = g.user.id
-            ticket.user_managed_by_id = g.user.id
         elif state == 'missing':
             ticket = None
         assert views.can_edit_chair_information(ticket) is (state == 'eligible')
@@ -137,6 +141,8 @@ def test_legacy_redirect_validates_ticket_anchor(app, monkeypatch, state):
             party_id=g.party.id,
             used_by_id=g.user.id,
             revoked=state == 'revoked',
+            is_used_by=lambda user_id: ticket.used_by_id == user_id,
+            is_user_managed_by=lambda _: False,
         )
         if state == 'foreign_user':
             ticket.used_by_id = generate_uuid()
@@ -162,12 +168,13 @@ def test_legacy_redirect_validates_ticket_anchor(app, monkeypatch, state):
         (ChairSource.user, 'Brings own chair'),
         (ChairSource.venue, 'Needs a provided chair'),
         (ChairSource.rental, 'rented'),
-        (None, 'Not specified yet'),
+        (ChairSource.unknown, 'Not specified yet'),
     ],
 )
 @pytest.mark.parametrize('checked_in', [False, True])
+@pytest.mark.parametrize('rental_enabled', [False, True])
 def test_theme_ticket_partial_uses_core_urls_and_displays_all_states(
-    source, label, checked_in
+    source, label, checked_in, rental_enabled
 ):
     app = Flask(__name__)
     Babel(app, default_locale='en')
@@ -180,6 +187,7 @@ def test_theme_ticket_partial_uses_core_urls_and_displays_all_states(
         _=gettext,
         chair_source_label=views.get_chair_source_label,
         can_edit_chair_information=views.can_edit_chair_information,
+        is_chair_rental_selection_enabled=lambda _: rental_enabled,
         url_for=url_for,
         render_icon=lambda _: '',
     )
@@ -194,6 +202,8 @@ def test_theme_ticket_partial_uses_core_urls_and_displays_all_states(
             revoked=False,
             user_checked_in=checked_in,
             chair_source=source,
+            is_used_by=lambda user_id: ticket.used_by_id == user_id,
+            is_user_managed_by=lambda _: False,
         )
         html = env.get_template(
             'site/ticketing/_chair_information.html'
@@ -203,13 +213,17 @@ def test_theme_ticket_partial_uses_core_urls_and_displays_all_states(
     if checked_in:
         assert 'data-action="set-chair-source"' not in html
     else:
-        assert html.count('data-action="set-chair-source"') == 2
+        assert html.count('data-action="set-chair-source"') == (
+            3 if rental_enabled else 2
+        )
         for offered_source in ['user', 'venue']:
             assert (
                 f'/tickets/tickets/{ticket.id}/chair_source/{offered_source}'
                 in html
             )
-        assert '/chair_source/rental' not in html
+        assert ('/chair_source/rental' in html) is rental_enabled
         assert '/chair_source/unknown' not in html
         assert 'I will bring my own chair' in html
         assert 'I need a provided chair' in html
+        assert ('Make selection' in html) is (source is ChairSource.unknown)
+    assert f'data-chair-source="{source.name}"' in html

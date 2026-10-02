@@ -197,13 +197,15 @@
               <div>
                 <div class="data-label">{{ _('Chair') }}</div>
               </div>
-              {%- if ticket_management_enabled and ticket.is_used_by(g.user.id) and not ticket.user_checked_in %}
+              {%- if ticket_management_enabled and can_edit_chair_information(ticket) %}
               <div>
                 <div class="dropdown">
                   <button class="dropdown-toggle button button--outline is-compact">{{ render_icon('chevron-down') -}}</button>
                   <ol class="dropdown-menu dropdown-menu--right">
                     <li><a class="dropdown-item" href="{{ url_for('.set_chair_source', ticket_id=ticket.id, chair_source='venue') }}" data-action="set-chair-source">{{ _('venue-provided') }}</a></li>
+                    {%- if is_chair_rental_selection_enabled(ticket.party_id) %}
                     <li><a class="dropdown-item" href="{{ url_for('.set_chair_source', ticket_id=ticket.id, chair_source='rental') }}" data-action="set-chair-source">{{ _('rented') }}</a></li>
+                    {%- endif %}
                     <li><a class="dropdown-item" href="{{ url_for('.set_chair_source', ticket_id=ticket.id, chair_source='user') }}" data-action="set-chair-source">{{ _('user-provided') }}</a></li>
                     <li class="dropdown-divider"></li>
                     <li><a class="dropdown-item" href="{{ url_for('.set_chair_source', ticket_id=ticket.id, chair_source='unknown') }}" data-action="set-chair-source">{{ _('unknown') }}</a></li>
@@ -213,16 +215,12 @@
               {%- endif %}
             </div>
             <div class="data-value">
-            {%- if ticket.chair_source -%}
-              {%- if ticket.chair_source.name == 'rental' -%}
-                {{ _('rented') }}
-              {%- elif ticket.chair_source.name == 'user' -%}
-                {{ _('user-provided') }}
-              {%- elif ticket.chair_source.name == 'venue' -%}
-                {{ _('venue-provided') }}
-              {%- else -%}
-                {{ _('unknown')|dim }}
-              {%- endif -%}
+            {%- if ticket.chair_source.name == 'rental' -%}
+              {{ _('rented') }}
+            {%- elif ticket.chair_source.name == 'user' -%}
+              {{ _('user-provided') }}
+            {%- elif ticket.chair_source.name == 'venue' -%}
+              {{ _('venue-provided') }}
             {%- else -%}
               {{ _('unknown')|dim }}
             {%- endif -%}

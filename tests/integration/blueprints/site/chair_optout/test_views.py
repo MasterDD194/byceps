@@ -10,6 +10,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from byceps.database import db
+from byceps.services.chair_optout import chair_setting_service
 from byceps.services.party.dbmodels import DbParty
 from byceps.services.seating import seat_service, seating_area_service
 from byceps.services.seating.blueprints.site import views as seating_views
@@ -31,6 +32,7 @@ from tests.helpers import (
     http_client,
     log_in_user,
 )
+from tests.helpers.shop import place_order
 
 
 BASE_URL = 'http://www.acmecon.test'
@@ -55,6 +57,32 @@ def theme_app(make_site_app, site):
         yield app
 
 
+@pytest.fixture
+def make_chair_ticket(
+    make_brand,
+    make_shop,
+    make_order_number_sequence,
+    make_storefront,
+    make_product,
+    make_orderer,
+):
+    """Provide the order association expected by the standard ticket page."""
+    shop = make_shop(make_brand())
+    sequence = make_order_number_sequence(shop.id)
+    storefront = make_storefront(shop.id, sequence.id)
+    product = make_product(shop.id)
+
+    def create(category, owner, participant):
+        order = place_order(
+            shop, storefront, make_orderer(owner), [(product, 1)]
+        )
+        return ticket_creation_service.create_ticket(
+            category, owner, user=participant, order_number=order.order_number
+        )
+
+    return create
+
+
 def test_legacy_index_requires_login(site_app, site):
     with http_client(site_app) as client:
         response = client.get(f'{BASE_URL}/chair_optout/')
@@ -73,7 +101,7 @@ def test_legacy_index_redirects_with_only_valid_participant_anchor(
         category, participant, user=participant
     )
     foreign_ticket = ticket_creation_service.create_ticket(
-        category, participant, user=other_user
+        category, other_user, user=other_user
     )
     log_in_user(participant.id)
     query = {
@@ -164,9 +192,7 @@ def test_current_participant_stores_both_choices_in_core(
         ]
 
 
-@pytest.mark.parametrize(
-    'source', ['invalid', 'own', 'provided', 'unknown', 'rental']
-)
+@pytest.mark.parametrize('source', ['invalid', 'own', 'provided', 'rental'])
 def test_invalid_source_preserves_core_answer(
     site_app, site, party, make_user, make_ticket_category, source
 ):
@@ -218,6 +244,8 @@ def test_ineligible_update_is_denied_without_writes(
     ).unwrap()
     if scenario == 'revoked':
         ticket.revoked = True
+    elif scenario == 'foreign_user':
+        ticket.user_managed_by_id = other_user.id
     elif scenario == 'checked_in':
         ticket.user_checked_in = True
     elif scenario == 'disabled':
@@ -260,7 +288,7 @@ def test_core_chair_update_requires_login(
     with http_client(site_app) as client:
         response = client.post(_chair_url(site_app, ticket.id, 'user'))
     assert response.status_code == 302
-    assert _get_persisted_chair_source(ticket.id) is None
+    assert _get_persisted_chair_source(ticket.id) is ChairSource.unknown
     assert not ticket_log_service.get_entries_for_ticket(ticket.id)
 
 
@@ -285,6 +313,9 @@ def test_gv36_seating_reminder_tracks_own_ticket_while_managing_others(
     managed_ticket = ticket_creation_service.create_ticket(
         category, participant, user=other_user
     )
+    ticket_user_management_service.appoint_user_manager(
+        managed_ticket.id, other_user, participant
+    ).unwrap()
     log_in_user(participant.id)
     monkeypatch.setattr(
         seating_views, '_is_seat_management_enabled', lambda: True
@@ -339,6 +370,9 @@ def test_seat_manager_without_used_ticket_has_no_chair_reminder(
     ticket = ticket_creation_service.create_ticket(
         category, owner, user=participant
     )
+    ticket_user_management_service.appoint_user_manager(
+        ticket.id, participant, owner
+    ).unwrap()
     log_in_user(owner.id)
     monkeypatch.setattr(
         seating_views, '_is_seat_management_enabled', lambda: True
@@ -350,6 +384,130 @@ def test_seat_manager_without_used_ticket_has_no_chair_reminder(
     assert response.status_code == 200
     assert ticket.code in response.get_data(as_text=True)
     assert 'chair-information-link"' not in response.get_data(as_text=True)
+
+
+@pytest.mark.parametrize('theme', [False, True], ids=['standard', 'gv36'])
+@pytest.mark.parametrize('rental_enabled', [False, True])
+def test_rental_switch_controls_choices_posts_and_preserves_existing_answer(
+    site_app,
+    theme_app,
+    party,
+    make_user,
+    make_ticket_category,
+    make_chair_ticket,
+    theme,
+    rental_enabled,
+):
+    app = theme_app if theme else site_app
+    participant = make_user(generate_token())
+    category = make_ticket_category(party.id, generate_token())
+    ticket = make_chair_ticket(category, participant, participant)
+    log_in_user(participant.id)
+    chair_setting_service.set_rental_selection_enabled(party.id, rental_enabled)
+    try:
+        with http_client(app, user_id=participant.id) as client:
+            html = client.get(f'{BASE_URL}/tickets/mine').get_data(as_text=True)
+            rental_url = _chair_url(app, ticket.id, 'rental')
+            assert (f'href="{rental_url}"' in html) is rental_enabled
+            assert (
+                f'href="{_chair_url(app, ticket.id, "unknown")}"' in html
+            ) is (not theme)
+            response = client.post(rental_url)
+            assert response.status_code == (204 if rental_enabled else 400)
+            assert _get_persisted_chair_source(ticket.id) is (
+                ChairSource.rental if rental_enabled else ChairSource.unknown
+            )
+            if rental_enabled:
+                chair_setting_service.set_rental_selection_enabled(
+                    party.id, False
+                )
+                html = client.get(f'{BASE_URL}/tickets/mine').get_data(
+                    as_text=True
+                )
+                assert _translate(app, 'rented') in html
+                assert f'href="{rental_url}"' not in html
+                assert client.post(rental_url).status_code == 400
+                assert (
+                    _get_persisted_chair_source(ticket.id) is ChairSource.rental
+                )
+            # The Core reset remains available, including when rental is OFF.
+            assert (
+                client.post(_chair_url(app, ticket.id, 'unknown')).status_code
+                == 204
+            )
+            assert _get_persisted_chair_source(ticket.id) is ChairSource.unknown
+        entries = [
+            entry
+            for entry in ticket_log_service.get_entries_for_ticket(ticket.id)
+            if entry.event_type == 'chair-source-set'
+        ]
+        assert len(entries) == (2 if rental_enabled else 1)
+        assert all(
+            entry.data['initiator_id'] == str(participant.id)
+            for entry in entries
+        )
+    finally:
+        chair_setting_service.set_rental_selection_enabled(party.id, False)
+
+
+@pytest.mark.parametrize('theme', [False, True], ids=['standard', 'gv36'])
+@pytest.mark.parametrize(
+    ('role', 'allowed'),
+    [
+        ('participant', True),
+        ('user_manager', True),
+        ('owner', True),
+        ('delegated_owner', False),
+        ('seat_manager', False),
+        ('stranger', False),
+    ],
+)
+def test_chair_permissions_match_core_in_both_interfaces(
+    site_app,
+    theme_app,
+    party,
+    make_user,
+    make_ticket_category,
+    make_chair_ticket,
+    theme,
+    role,
+    allowed,
+):
+    app = theme_app if theme else site_app
+    owner, participant, manager, seat_manager, stranger = [
+        make_user(generate_token()) for _ in range(5)
+    ]
+    category = make_ticket_category(party.id, generate_token())
+    ticket = make_chair_ticket(category, owner, participant)
+    ticket.seat_managed_by_id = seat_manager.id
+    if role != 'owner':
+        ticket.user_managed_by_id = manager.id
+    db.session.commit()
+    actor = {
+        'participant': participant,
+        'user_manager': manager,
+        'owner': owner,
+        'delegated_owner': owner,
+        'seat_manager': seat_manager,
+        'stranger': stranger,
+    }[role]
+    log_in_user(actor.id)
+    with http_client(app, user_id=actor.id) as client:
+        html = client.get(f'{BASE_URL}/tickets/mine').get_data(as_text=True)
+        source_url = _chair_url(app, ticket.id, 'venue')
+        assert (f'href="{source_url}"' in html) is allowed
+        response = client.post(source_url)
+    assert response.status_code == (204 if allowed else 403)
+    assert _get_persisted_chair_source(ticket.id) is (
+        ChairSource.venue if allowed else ChairSource.unknown
+    )
+    entries = ticket_log_service.get_entries_for_ticket(ticket.id)
+    assert len(entries) == (1 if allowed else 0)
+    if allowed:
+        assert entries[0].data == {
+            'chair_source': 'venue',
+            'initiator_id': str(actor.id),
+        }
 
 
 def _get_persisted_chair_source(ticket_id):

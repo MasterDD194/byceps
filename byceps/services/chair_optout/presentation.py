@@ -10,7 +10,7 @@ from flask_babel import gettext
 from byceps.services.ticketing.models.ticket import ChairSource
 
 
-def get_chair_source_label(source: ChairSource | None) -> str:
+def get_chair_source_label(source: ChairSource) -> str:
     """Return the translated label for a Core chair source."""
     match source:
         case ChairSource.user:

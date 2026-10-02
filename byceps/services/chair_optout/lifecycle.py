@@ -11,6 +11,7 @@ from sqlalchemy.orm import Mapper
 from sqlalchemy.orm.attributes import flag_modified
 
 from byceps.services.ticketing.dbmodels.ticket import DbTicket
+from byceps.services.ticketing.models.ticket import ChairSource
 
 
 def enable_chair_lifecycle() -> None:
@@ -35,7 +36,7 @@ def _reset_after_user_change(
     if row is None or row.used_by_id == ticket.used_by_id:
         return
 
-    ticket.chair_source = None
+    ticket.chair_source = ChairSource.unknown
     # A concurrently saved answer may not be present in this ORM instance.
-    # Force the reset into the UPDATE even if its local value was already NULL.
+    # Force the reset into the UPDATE even if its local value was already unknown.
     flag_modified(ticket, '_chair_source')

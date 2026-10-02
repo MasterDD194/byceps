@@ -7,10 +7,13 @@ byceps.services.chair_optout.blueprints.admin.views
 
 from urllib.parse import quote
 
-from flask import abort, request
+from flask import abort, g, request
 from flask_babel import gettext
 
-from byceps.services.chair_optout import chair_optout_service
+from byceps.services.chair_optout import (
+    chair_optout_service,
+    chair_setting_service,
+)
 from byceps.services.chair_optout.presentation import get_chair_source_label
 from byceps.services.party import party_service, party_setting_service
 from byceps.services.party.models import Party, PartyID
@@ -19,9 +22,12 @@ from byceps.services.site import site_service
 from byceps.services.ticketing.models.ticket import ChairSource
 from byceps.util.export import serialize_tuples_to_csv
 from byceps.util.framework.blueprint import create_blueprint
+from byceps.util.framework.flash import flash_success
 from byceps.util.framework.templating import templated
 from byceps.util.templating import SITES_PATH
-from byceps.util.views import permission_required, textified
+from byceps.util.views import permission_required, redirect_to, textified
+
+from .forms import RentalSelectionForm
 
 
 blueprint = create_blueprint('chair_optout_admin', __name__)
@@ -72,7 +78,47 @@ def chair_information(party_id):
         'summary': summary,
         'selected_filter': selected_filter,
         'seat_urls_by_ticket_id': seat_urls_by_ticket_id,
+        'show_rental_information': chair_setting_service.should_show_rental_information(
+            party.id, has_rented_chair=summary.rented_chair > 0
+        ),
     }
+
+
+@blueprint.get('/for_party/<party_id>/chair_information/rental_selection')
+@permission_required('seating.view')
+@templated('admin/chair_optout/rental_selection')
+def rental_selection(party_id):
+    """Show the party-local rental selection setting."""
+    party = _get_party_or_404(party_id)
+    enabled = chair_setting_service.is_rental_selection_enabled(party.id)
+    form = (
+        RentalSelectionForm(data={'enabled': 'true' if enabled else 'false'})
+        if g.user.has_permission('party.update')
+        else None
+    )
+
+    return {
+        'party': party,
+        'rental_selection_enabled': enabled,
+        'rental_selection_form': form,
+        'selected_filter': _get_selected_filter(),
+    }
+
+
+@blueprint.post('/for_party/<party_id>/chair_information/rental_selection')
+@permission_required('party.update')
+def update_rental_selection(party_id):
+    """Enable or disable new rental selections for this party."""
+    party = _get_party_or_404(party_id)
+    form = RentalSelectionForm(request.form)
+    if not form.validate():
+        abort(400)
+
+    chair_setting_service.set_rental_selection_enabled(
+        party.id, form.enabled.data == 'true'
+    )
+    flash_success(gettext('Rental chair selection has been updated.'))
+    return redirect_to('.rental_selection', party_id=party.id)
 
 
 @blueprint.get('/for_party/<party_id>/chair_information/seating_plan')
@@ -98,7 +144,10 @@ def chair_information_seating_plan(party_id):
         'areas_with_seats': areas_with_seats,
         'chair_sources_by_ticket_id': chair_sources,
         'matching_ticket_ids': matching_ticket_ids,
-        'has_rented_chair': ChairSource.rental in chair_sources.values(),
+        'show_rental_information': chair_setting_service.should_show_rental_information(
+            party.id,
+            has_rented_chair=ChairSource.rental in chair_sources.values(),
+        ),
         'seat_stylesheet_site_id': _find_seat_stylesheet_site_id(party.id),
         'selected_filter': selected_filter,
     }
@@ -166,7 +215,7 @@ def _filter_report_entries(report_entries, selected_filter: str):
 
 
 def _matches_filter(
-    source: ChairSource | None, has_seat: bool, selected_filter: str
+    source: ChairSource, has_seat: bool, selected_filter: str
 ) -> bool:
     match selected_filter:
         case 'own_chair':
@@ -176,7 +225,7 @@ def _matches_filter(
         case 'rented_chair':
             return source is ChairSource.rental
         case 'not_specified':
-            return source is None
+            return source is ChairSource.unknown
         case 'no_seat':
             return not has_seat
         case _:

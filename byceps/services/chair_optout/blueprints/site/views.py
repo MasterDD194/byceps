@@ -10,6 +10,9 @@ from uuid import UUID
 from flask import g, request
 
 from byceps.services.chair_optout import chair_optout_service
+from byceps.services.chair_optout.chair_setting_service import (
+    is_rental_selection_enabled,
+)
 from byceps.services.chair_optout.presentation import get_chair_source_label
 from byceps.services.ticketing import ticket_service
 from byceps.services.ticketing.models.ticket import TicketID
@@ -22,11 +25,14 @@ from .request_hooks import register_request_hooks
 blueprint = create_blueprint('chair_optout', __name__)
 register_request_hooks(blueprint)
 blueprint.add_app_template_global(get_chair_source_label, 'chair_source_label')
+blueprint.add_app_template_global(
+    is_rental_selection_enabled, 'is_chair_rental_selection_enabled'
+)
 
 
 @blueprint.app_template_global()
 def get_pending_chair_ticket_ids() -> list[TicketID]:
-    """Return the current participant's editable, unanswered tickets."""
+    """Return the current user's editable, unanswered participant tickets."""
     if (
         not g.user.authenticated
         or g.party is None
@@ -58,7 +64,9 @@ def can_edit_chair_information(ticket) -> bool:
         and g.party.ticket_management_enabled
         and ticket is not None
         and ticket.party_id == g.party.id
-        and ticket.used_by_id == g.user.id
+        and (
+            ticket.is_used_by(g.user.id) or ticket.is_user_managed_by(g.user.id)
+        )
         and not ticket.revoked
         and not ticket.user_checked_in
     )
@@ -80,7 +88,10 @@ def index():
             if (
                 ticket is not None
                 and ticket.party_id == g.party.id
-                and ticket.used_by_id == g.user.id
+                and (
+                    ticket.is_used_by(g.user.id)
+                    or ticket.is_user_managed_by(g.user.id)
+                )
                 and not ticket.revoked
             ):
                 anchor = f'ticket-{ticket.id}'

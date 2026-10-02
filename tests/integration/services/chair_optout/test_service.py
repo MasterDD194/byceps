@@ -46,9 +46,7 @@ def _set_source(party_id, ticket_id, user, source):
     ).unwrap()
 
 
-@pytest.mark.parametrize(
-    'source', [ChairSource.user, ChairSource.venue, ChairSource.rental, None]
-)
+@pytest.mark.parametrize('source', list(ChairSource))
 def test_report_and_compact_map_use_core_source_without_seat(
     ticket, party, user, source
 ):
@@ -68,7 +66,7 @@ def test_pending_prompt_returns_after_core_reset(ticket, party, user):
     assert ticket.id in get_pending(party.id, user.id)
     _set_source(party.id, ticket.id, user, ChairSource.venue)
     assert ticket.id not in get_pending(party.id, user.id)
-    _set_source(party.id, ticket.id, user, None)
+    _set_source(party.id, ticket.id, user, ChairSource.unknown)
     assert ticket.id in get_pending(party.id, user.id)
 
 
@@ -123,9 +121,13 @@ def test_changed_and_returning_participant_must_answer_again(
         ticket_user_management_service.appoint_user(
             ticket.id, new_user, user
         ).unwrap()
-    assert ticket_service.get_ticket(ticket.id).chair_source is None
+    assert (
+        ticket_service.get_ticket(ticket.id).chair_source is ChairSource.unknown
+    )
     ticket_user_management_service.appoint_user(ticket.id, user, user).unwrap()
-    assert ticket_service.get_ticket(ticket.id).chair_source is None
+    assert (
+        ticket_service.get_ticket(ticket.id).chair_source is ChairSource.unknown
+    )
     _set_source(party.id, ticket.id, user, ChairSource.venue)
     assert (
         ticket_service.get_ticket(ticket.id).chair_source is ChairSource.venue
@@ -145,7 +147,7 @@ def test_rollback_of_participant_change_restores_source(
     _set_source(party.id, ticket.id, user, ChairSource.user)
     ticket.used_by_id = new_user.id
     db.session.flush()
-    assert ticket.chair_source is None
+    assert ticket.chair_source is ChairSource.unknown
     db.session.rollback()
     assert ticket.used_by_id == user.id
     assert ticket.chair_source is ChairSource.user
@@ -185,7 +187,7 @@ def test_access_guard_holds_lock_through_core_commit(ticket, party, user):
 
 
 def test_access_guard_refreshes_cached_source(ticket, party, user):
-    assert ticket.chair_source is None
+    assert ticket.chair_source is ChairSource.unknown
     with Session(db.engine) as independent:
         independent.execute(
             update(DbTicket)
@@ -198,13 +200,22 @@ def test_access_guard_refreshes_cached_source(ticket, party, user):
     db.session.rollback()
 
 
-@pytest.mark.parametrize('change', ['participant', 'revocation', 'check_in'])
+@pytest.mark.parametrize(
+    'change', ['participant', 'revocation', 'check_in', 'manager']
+)
 def test_access_guard_rechecks_cached_eligibility(
     ticket, party, user, make_user, change
 ):
     new_user = make_user(generate_token())
+    if change == 'manager':
+        ticket.used_by_id = new_user.id
+        db.session.commit()
     changes = {
-        'participant': {'used_by_id': new_user.id},
+        'participant': {
+            'used_by_id': new_user.id,
+            'user_managed_by_id': new_user.id,
+        },
+        'manager': {'user_managed_by_id': new_user.id},
         'revocation': {'revoked': True},
         'check_in': {'user_checked_in': True},
     }
@@ -293,7 +304,9 @@ def test_reassignment_resets_answer_absent_from_stale_orm_instance(
             allow_commit.set()
         future.result(timeout=10)
     db.session.expire_all()
-    assert ticket_service.get_ticket(ticket_id).chair_source is None
+    assert (
+        ticket_service.get_ticket(ticket_id).chair_source is ChairSource.unknown
+    )
 
 
 def test_delayed_duplicate_appointment_preserves_new_participants_answer(

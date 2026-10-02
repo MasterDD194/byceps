@@ -12011,3 +12011,46 @@ msgid ""
 msgstr ""
 "Aus diesem Ergebnis wurde bereits eine spätere Runde gebildet, daher kann"
 " es nicht mehr zurückgesetzt werden."
+
+#: byceps/services/chair_optout/blueprints/admin/forms.py
+#: byceps/services/chair_optout/blueprints/admin/templates/admin/chair_optout/rental_selection.html
+#: byceps/services/chair_optout/blueprints/admin/templates/macros/admin/chair_optout.html
+msgid "Rental chair selection"
+msgstr "Mietstuhl-Auswahl"
+
+#: byceps/services/chair_optout/blueprints/admin/forms.py
+#: byceps/services/chair_optout/blueprints/admin/templates/admin/chair_optout/rental_selection.html
+msgid "OFF"
+msgstr "AUS"
+
+#: byceps/services/chair_optout/blueprints/admin/forms.py
+#: byceps/services/chair_optout/blueprints/admin/templates/admin/chair_optout/rental_selection.html
+msgid "ON"
+msgstr "AN"
+
+#: byceps/services/chair_optout/blueprints/admin/views.py
+msgid "Rental chair selection has been updated."
+msgstr "Die Mietstuhl-Auswahl wurde aktualisiert."
+
+#: sites/totalverplant-36/template_overrides/site/ticketing/_chair_information.html
+msgid "I expect a rented chair"
+msgstr "Ich erwarte einen gemieteten Stuhl"
+
+#: byceps/services/chair_optout/blueprints/admin/templates/admin/chair_optout/rental_selection.html
+msgid ""
+"Participants report an expected rented chair; this does not book or reserve "
+"a chair. Existing rental information remains visible when disabled."
+msgstr ""
+"Teilnehmer geben an, einen gemieteten Stuhl zu erwarten; dadurch wird kein "
+"Stuhl gebucht oder reserviert. Vorhandene Mietstuhl-Angaben bleiben beim "
+"Ausschalten sichtbar."
+
+#: byceps/services/chair_optout/blueprints/admin/templates/admin/chair_optout/rental_selection.html
+msgid "Are you sure you want to enable this for the party?"
+msgstr "Bist du dir sicher, dass du das für die Party aktivieren möchtest?"
+
+#: byceps/services/chair_optout/blueprints/admin/templates/admin/chair_optout/index.html
+#: byceps/services/chair_optout/blueprints/admin/templates/admin/chair_optout/seating_plan.html
+#: byceps/services/chair_optout/blueprints/admin/templates/macros/admin/chair_optout.html
+msgid "Rental chair"
+msgstr "Mietstuhl"

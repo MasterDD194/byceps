@@ -10,6 +10,9 @@ from flask import abort, Blueprint, g, request
 from byceps.services.chair_optout.chair_access_service import (
     lock_participant_ticket,
 )
+from byceps.services.chair_optout.chair_setting_service import (
+    is_rental_selection_enabled,
+)
 from byceps.services.ticketing import ticket_service
 
 
@@ -38,5 +41,6 @@ def _guard_chair_source_update() -> None:
             abort(404)
         abort(403)
 
-    if request.view_args['chair_source'] not in {'user', 'venue'}:
+    chair_source = request.view_args['chair_source']
+    if chair_source == 'rental' and not is_rental_selection_enabled(g.party.id):
         abort(400)

@@ -27,14 +27,14 @@
     {{ render_bigstats_item(summary.brings_own_chair, _('Brings own chair')) }}
     {{ render_bigstats_item(summary.needs_provided_chair, _('Needs a provided chair')) }}
     {% if summary.rented_chair %}
-    {{ render_bigstats_item(summary.rented_chair, _('rented')) }}
+    {{ render_bigstats_item(summary.rented_chair, _('Rental chair')) }}
     {% endif %}
     {{ render_bigstats_item(summary.not_specified, _('Not specified yet')) }}
     {{ render_bigstats_item(summary.no_seat, _('no seat')) }}
   </div>
 
   <div class="block">
-    {{ render_chair_information_filters(party, '.chair_information', selected_filter, summary.rented_chair > 0) }}
+    {{ render_chair_information_filters(party, '.chair_information', selected_filter, show_rental_information) }}
   </div>
 
   {%- if report_entries %}
