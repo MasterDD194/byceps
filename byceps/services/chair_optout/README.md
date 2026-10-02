@@ -84,12 +84,20 @@ venue chairs a blue marker, and unknown/rental sources have distinct markers and
 tooltips. The module-local tooltip script uses DOM text nodes, independently of
 Core seating behavior. CSV cells retain formula-injection escaping.
 
-GV36 chair choices use Core POST requests followed by a background page fetch
-that consumes Core's flash message. The saved source and confirmation are shown
-at the affected ticket without navigation or a scroll jump. Selecting the
-already saved source only closes the menu, without another request. Failed
-requests retain the displayed answer and show a localized inline error. Open
-ticket dropdowns remain above other ticket cards and the footer in both themes.
+GV36 chair choices use Core POST requests followed by a background page GET.
+The GET identifies the affected ticket by ID and verifies the current source;
+session-wide flash messages are consumed but are not evidence of this ticket's
+save. A matching source gets a ticket-local, localized inline confirmation,
+including when the flash was already consumed or belongs to another ticket.
+There is no navigation or scroll jump. Selecting the displayed source first
+verifies the server state with a GET. Only a verified match closes the menu
+without a POST or ticket-log entry; a stale display triggers a regular save.
+A failed precheck shows an inline error and permits retry. If a POST succeeds
+but its refresh fails or contains invalid ticket data, the old display is marked
+uncertain and the error distinguishes the successful request from the unverified
+answer. The next explicit choice can be saved again. A conflicting refreshed
+source is displayed with a retry message instead of a false success. Open ticket
+dropdowns remain above other ticket cards and the footer in both themes.
 
 Public seat links use the party's `primary_party_site_id`, or the unique current
 site if no primary site is configured, and use HTTPS like Core cross-site links.
@@ -124,16 +132,25 @@ installation step. Restore the backup to undo a data reset.
 Integration tests drop tables. Use a disposable PostgreSQL database and Redis,
 never the shared runtime. Configure `POSTGRES_HOST`, `POSTGRES_PORT`,
 `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB`, `REDIS_HOST`, and `REDIS_PORT`.
+Check the effective app targets before running integration tests: inherited
+`SQLALCHEMY_DATABASE_URI` and `REDIS_URL` can override those explicit settings.
+The following commands remove these overrides; the host/port variables must
+still point to explicitly verified disposable resources.
 
 ```sh
 uv sync --frozen --group test
 uv run --no-sync pytest tests/unit/services/chair_optout \
-  tests/unit/blueprints/chair_optout tests/integration/services/chair_optout \
+  tests/unit/blueprints/chair_optout tests/unit/test_browser_chair_fixture.py \
+  tests/unit/services/lan_tournament/test_more_items_patch.py
+env -u SQLALCHEMY_DATABASE_URI -u REDIS_URL uv run --no-sync pytest \
+  tests/integration/services/chair_optout \
   tests/integration/blueprints/admin/chair_optout \
   tests/integration/blueprints/site/chair_optout \
   tests/integration/blueprints/site/dashboard \
-  tests/integration/blueprints/site/user_profile
-uv run --no-sync coverage run --source=byceps -m pytest tests
+  tests/integration/blueprints/site/user_profile \
+  tests/integration/blueprints/admin/more
+env -u SQLALCHEMY_DATABASE_URI -u REDIS_URL uv run --no-sync \
+  coverage run --source=byceps -m pytest tests
 ```
 
 The tests exercise sources, eligibility, rental OFF/ON, user-manager permissions,
@@ -153,29 +170,37 @@ database and simulate only Core's HTTP response. They cover light/dark desktop
 and mobile layouts, dropdown hit targets over cards/footer, inline confirmation
 without navigation, compatibility with older markup, repeated selections,
 persistence after reload, rental OFF/ON and retained rental answers after OFF,
-the initial unknown DOM status, and failed-save retry. Integration tests also
+the initial unknown DOM status, failed-save retry, consumed/unrelated flashes,
+stale answers after failed refreshes or another editor, verified no-ops without
+writes/logs, failed precheck retry, conflicting/invalid refreshes, and correct
+synchronization of multiple tickets. Integration tests also
 render the standard ticket page for both switch states and all chair-edit roles.
 Store the generated fixture in the local runtime directory:
 
 ```sh
-FIXTURE=/path/to/runtime/ticket-chair-browser-fixture.json
+RUNTIME=/home/dennis/projekte/Byceps/runtime/chair-review-fixes-20261002
+mkdir -p "$RUNTIME"
+FIXTURE="$RUNTIME/ticket-chair-browser-fixture.json"
 uv run --no-sync python tests/browser/render_ticket_chair_fixture.py > "$FIXTURE"
 docker run --rm --ipc=host -v "$PWD:/repo:ro" \
-  -v "$FIXTURE:/fixtures/tickets.json:ro" -w /repo \
+  -v "$RUNTIME:/fixtures" -w /repo \
   mcr.microsoft.com/playwright:v1.56.1-noble sh -c \
-  'npm install --prefix /tmp --ignore-scripts --no-package-lock playwright@1.56.1 && NODE_PATH=/tmp/node_modules node tests/browser/ticket_chair_interactions.cjs /fixtures/tickets.json'
+  'npm install --prefix /tmp --ignore-scripts --no-package-lock playwright@1.56.1 && NODE_PATH=/tmp/node_modules node tests/browser/ticket_chair_interactions.cjs /fixtures/ticket-chair-browser-fixture.json'
 ```
 
 German translations remain in `byceps/translations/de/LC_MESSAGES/messages.po`.
-Compile locally with `just babel-compile` before running the UI; the Dockerfile
-does not compile the catalogue. Never commit generated `messages.mo`, and
+The Docker build compiles the catalogue before installing the project into the
+image. Local source execution may require `just babel-compile` for updated UI
+translations. To validate without replacing an existing local catalogue, use
+`uv run --no-sync pybabel compile -i byceps/translations/de/LC_MESSAGES/messages.po
+-o "$RUNTIME/messages.mo" -l de`. Never commit generated `messages.mo`, and
 preserve any pre-existing local catalogue changes. Tests must not assume newly
 added strings are already translated in the committed catalogue.
 
 Admin browser acceptance tests use the real admin application, stored settings,
 ticket sources and authenticated writer/reader sessions. With the isolated
 PostgreSQL/Redis environment variables above, create a separate database named
-`byceps_chair_followup_browser`, compile translations locally, and run:
+`byceps_chair_followup_browser` and run:
 
 ```sh
 POSTGRES_DB=byceps_chair_followup_browser uv run --no-sync python \
@@ -184,8 +209,14 @@ POSTGRES_DB=byceps_chair_followup_browser uv run --no-sync python \
 node tests/browser/admin_chair_interactions.cjs /path/to/runtime/admin-chair-fixture.json
 ```
 
+The fixture checks the effective database and Redis URLs against its explicit
+configuration before initializing resource clients, recreating tables or writing
+test data. Conflicting overrides fail without exposing credentials. Its app and
+bootstrap use the same database; Redis uses database 1 on the explicit server.
 The fixture server recreates only that dedicated browser database and listens
 on `127.0.0.1:58080`. The browser test covers all four visibility states, tab and
 filter navigation, cancelled/confirmed activation, party-local persistence,
 disabling with retained answers, purple diamonds and read-only authorization.
-Screenshots are saved beside the fixture JSON in the runtime directory.
+Ticket and admin screenshots are saved beside their fixture JSON in the runtime
+directory. If Playwright/Chromium is installed locally, the ticket command can
+also be run as `node tests/browser/ticket_chair_interactions.cjs "$FIXTURE"`.

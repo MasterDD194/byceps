@@ -12,9 +12,11 @@ import sys
 from flask import Flask, g
 from flask_babel import gettext
 from PIL import Image
+from sqlalchemy.engine import make_url
+from sqlalchemy.exc import ArgumentError
 from werkzeug.serving import run_simple
 
-from byceps.application import create_admin_app
+from byceps.application import _assemble_configuration, create_admin_app
 from byceps.config.converter import assemble_database_uri
 from byceps.config.models import AdminWebAppConfig, DatabaseConfig, RedisConfig
 from byceps.database import db
@@ -43,6 +45,46 @@ from tests.integration.conftest import build_byceps_config
 from tests.integration.database import populate_database, set_up_database
 
 
+def _validate_resource_targets(config, database_uri, redis_url) -> None:
+    for key, expected in [
+        ('SQLALCHEMY_DATABASE_URI', database_uri),
+        ('REDIS_URL', redis_url),
+    ]:
+        try:
+            matches = make_url(config[key]) == make_url(expected)
+        except (ArgumentError, KeyError, TypeError, ValueError):
+            matches = False
+        if not matches:
+            # Never include URLs: they may contain inherited credentials.
+            raise RuntimeError(
+                f'{key} must match the explicit isolated browser fixture target.'
+            ) from None
+
+
+def create_fixture_app(
+    data_path: Path, database_config: DatabaseConfig, redis_config: RedisConfig
+):
+    byceps_config = build_byceps_config(
+        data_path, database_config, redis_config
+    )
+    app_config = AdminWebAppConfig(server_name='127.0.0.1:58080')
+    database_uri = assemble_database_uri(database_config)
+    # Assemble the same effective configuration as Core, before initializing
+    # clients or recreating tables. Environment overrides remain enabled.
+    config = _assemble_configuration(byceps_config, app_config)
+    _validate_resource_targets(config, database_uri, redis_config.url)
+    app = create_admin_app(byceps_config, app_config)
+    _validate_resource_targets(app.config, database_uri, redis_config.url)
+
+    bootstrap = Flask(__name__)
+    bootstrap.config['SQLALCHEMY_DATABASE_URI'] = database_uri
+    db.init_app(bootstrap)
+    with bootstrap.app_context():
+        set_up_database()
+        populate_database()
+    return app
+
+
 def serve(fixture_path: Path) -> None:
     if os.environ.get('POSTGRES_DB') != 'byceps_chair_followup_browser':
         raise RuntimeError('A dedicated browser test database is required.')
@@ -56,19 +98,7 @@ def serve(fixture_path: Path) -> None:
     redis_config = RedisConfig(
         url=f'redis://{os.environ["REDIS_HOST"]}:{os.environ["REDIS_PORT"]}/1'
     )
-    bootstrap = Flask(__name__)
-    bootstrap.config['SQLALCHEMY_DATABASE_URI'] = assemble_database_uri(
-        database_config
-    )
-    db.init_app(bootstrap)
-    with bootstrap.app_context():
-        set_up_database()
-        populate_database()
-
-    app = create_admin_app(
-        build_byceps_config(fixture_path.parent, database_config, redis_config),
-        AdminWebAppConfig(server_name='127.0.0.1:58080'),
-    )
+    app = create_fixture_app(fixture_path.parent, database_config, redis_config)
     app.config['SESSION_COOKIE_SECURE'] = False
     with app.app_context():
         brand = brand_service.create_brand('chair-browser', 'Chair browser')

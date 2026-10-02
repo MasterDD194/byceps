@@ -125,15 +125,20 @@ def render_fixtures():
                 app.jinja_env.globals['is_chair_rental_selection_enabled'] = (
                     lambda _, enabled=rental_enabled: enabled
                 )
-                target_pages[name] = app.jinja_env.get_template(
-                    'site/ticketing/index_mine.html'
-                ).render(
-                    tickets=tickets,
-                    party_title='Fixture party',
-                    current_user_uses_any_ticket=True,
-                    ticket_management_enabled=True,
-                    order_ids_by_order_number={},
-                )
+                target_pages[name] = {}
+                for second_name, second_source in source_values.items():
+                    tickets[1].chair_source = second_source
+                    target_pages[name][second_name] = (
+                        app.jinja_env.get_template(
+                            'site/ticketing/index_mine.html'
+                        ).render(
+                            tickets=tickets,
+                            party_title='Fixture party',
+                            current_user_uses_any_ticket=True,
+                            ticket_management_enabled=True,
+                            order_ids_by_order_number={},
+                        )
+                    )
             labels[name] = chair_views.get_chair_source_label(source)
     with app.test_request_context('/tickets/mine'):
         flash_success(

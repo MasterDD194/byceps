@@ -2,8 +2,9 @@
 :License: Revised BSD (see `LICENSE` file for details)
 """
 
-import pytest
+import re
 
+import pytest
 from flask import url_for
 from flask_babel import force_locale, gettext
 from sqlalchemy import select
@@ -88,6 +89,61 @@ def test_legacy_index_requires_login(site_app, site):
         response = client.get(f'{BASE_URL}/chair_optout/')
 
     assert response.status_code == 302
+
+
+@pytest.mark.parametrize('target', ['own', 'foreign', 'revoked', 'invalid'])
+def test_legacy_redirect_targets_unique_rendered_standard_ticket_anchor(
+    site_app,
+    site,
+    party,
+    make_user,
+    make_ticket_category,
+    make_chair_ticket,
+    target,
+):
+    participant = make_user(generate_token())
+    other_user = make_user(generate_token())
+    category = make_ticket_category(party.id, generate_token())
+    tickets = [
+        make_chair_ticket(category, participant, participant) for _ in range(2)
+    ]
+    foreign = make_chair_ticket(category, other_user, other_user)
+    revoked = make_chair_ticket(category, participant, participant)
+    revoked.revoked = True
+    db.session.commit()
+    log_in_user(participant.id)
+    target_id = {
+        'own': tickets[1].id,
+        'foreign': foreign.id,
+        'revoked': revoked.id,
+        'invalid': 'invalid',
+    }[target]
+    with http_client(site_app, user_id=participant.id) as client:
+        redirect = client.get(
+            f'{BASE_URL}/chair_optout/',
+            query_string={'ticket_id': str(target_id)},
+        )
+        response = client.get(redirect.location)
+
+    assert redirect.status_code == 302
+    assert response.status_code == 200
+    assert redirect.location.endswith(
+        f'/tickets/mine#ticket-{tickets[1].id}'
+        if target == 'own'
+        else '/tickets/mine'
+    )
+    html = response.get_data(as_text=True)
+    ids = re.findall(r'<li id="(ticket-[^"]+)">', html)
+    assert set(ids) == {f'ticket-{ticket.id}' for ticket in tickets}
+    assert len(ids) == len(set(ids)) == 2
+    if target == 'own':
+        anchor = redirect.location.split('#', 1)[1]
+        assert html.count(f'id="{anchor}"') == 1
+        assert re.search(
+            rf'<li id="{anchor}">.*?<span class="ticket-code">{tickets[1].code}</span>',
+            html,
+            re.DOTALL,
+        )
 
 
 @pytest.mark.parametrize('ticket_id_arg', ['own', 'foreign', 'invalid', None])

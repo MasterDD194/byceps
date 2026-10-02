@@ -10379,6 +10379,22 @@ msgstr "Angabe machen"
 msgid "Change selection"
 msgstr "Angabe ändern"
 
+#: sites/totalverplant-36/template_overrides/site/ticketing/_chair_information.html
+msgid ""
+"The save request succeeded, but the current chair information could not be "
+"verified. Please try again or reload the page."
+msgstr ""
+"Die Speicheranfrage war erfolgreich, aber die aktuelle Stuhlangabe konnte "
+"nicht überprüft werden. Bitte versuche es erneut oder lade die Seite neu."
+
+#: sites/totalverplant-36/template_overrides/site/ticketing/_chair_information.html
+msgid ""
+"The current chair information differs from your selection. Please check the "
+"displayed answer and try again."
+msgstr ""
+"Die aktuelle Stuhlangabe weicht von deiner Auswahl ab. Bitte prüfe die "
+"angezeigte Angabe und versuche es erneut."
+
 #: byceps/services/chair_optout/blueprints/admin/templates/admin/chair_optout/index.html:49
 #: byceps/services/chair_optout/blueprints/admin/views.py:73
 msgid "Nickname"

@@ -1,6 +1,30 @@
-/** Refresh saved chair information and consume Core's flash without navigating. */
+/** Verify ticket-scoped chair information without navigating. */
 onDomReady(() => {
   let saving = false;
+
+  const loadInformation = async field => {
+    const response = await fetch(window.location.pathname + window.location.search, {cache: 'no-store'});
+    if (!response.ok || response.redirected) {
+      throw new Error('Ticket refresh failed');
+    }
+    const page = new DOMParser().parseFromString(await response.text(), 'text/html');
+    const ticketId = field.closest('[id^="ticket-"]').id;
+    const updatedField = page.getElementById(ticketId)?.querySelector('.chair-information');
+    const value = updatedField?.querySelector('.data-value');
+    const selection = updatedField?.querySelector('.field-sub > span');
+    const source = updatedField?.dataset.chairSource;
+    if (!value || !selection || !['unknown', 'user', 'venue', 'rental'].includes(source)) {
+      throw new Error('Ticket information missing');
+    }
+    return {field: updatedField, value: value.textContent, selection: selection.textContent, source};
+  };
+
+  const synchronize = (field, information) => {
+    field.querySelector('.data-value').textContent = information.value;
+    field.querySelector('.field-sub > span').textContent = information.selection;
+    field.dataset.chairSource = information.source;
+  };
+
   document.querySelectorAll('a[data-action="set-chair-source"]').forEach(choice => {
     choice.addEventListener('click', async event => {
       event.preventDefault();
@@ -8,12 +32,6 @@ onDomReady(() => {
       if (saving) {
         return;
       }
-      if (choice.dataset.chairSource && field.dataset.chairSource === choice.dataset.chairSource) {
-        field.querySelector('.dropdown').classList.remove('open');
-        field.querySelector('.dropdown-toggle').focus({preventScroll: true});
-        return;
-      }
-
       const scrollPosition = {top: window.scrollY, left: window.scrollX, behavior: 'instant'};
       const toggle = field.querySelector('.dropdown-toggle');
       const error = field.querySelector('.chair-update-error');
@@ -30,45 +48,50 @@ onDomReady(() => {
       error.dataset.defaultText = defaultError;
       error.textContent = defaultError;
       saving = true;
+      let saved = false;
+      const closeMenu = () => {
+        field.querySelector('.dropdown').classList.remove('open');
+        toggle.disabled = false;
+        toggle.focus({preventScroll: true});
+      };
 
       try {
         toggle.disabled = true;
         error.hidden = true;
         success.hidden = true;
+        // A displayed answer may have become stale in another tab or editor.
+        if (field.dataset.chairSource === choice.dataset.chairSource) {
+          const information = await loadInformation(field);
+          synchronize(field, information);
+          if (information.source === choice.dataset.chairSource) {
+            closeMenu();
+            return;
+          }
+        }
         const response = await fetch(choice.href, {method: 'POST'});
         if (response.status !== 204) {
           throw new Error('Chair update failed');
         }
 
-        // This GET also consumes the flash queued by the Core POST endpoint.
-        const pageResponse = await fetch(window.location.pathname + window.location.search, {cache: 'no-store'});
-        if (!pageResponse.ok || pageResponse.redirected) {
-          throw new Error('Ticket refresh failed');
-        }
-        const page = new DOMParser().parseFromString(await pageResponse.text(), 'text/html');
-        const ticket = page.getElementById(field.closest('[id^="ticket-"]').id);
-        const updatedField = ticket?.querySelector('.chair-information');
-        const serverError = page.querySelector('.bote-notices .color-danger .bote-notice-body');
-        if (serverError) {
-          error.textContent = serverError.textContent;
+        saved = true;
+        // Session-wide flashes are not evidence of this ticket's saved state.
+        const information = await loadInformation(field);
+        synchronize(field, information);
+        closeMenu();
+        if (information.source !== choice.dataset.chairSource) {
+          error.textContent = information.field.dataset.conflictText || defaultError;
           error.hidden = false;
           return;
         }
-        const updatedValue = updatedField?.querySelector('.data-value');
-        const updatedSelection = updatedField?.querySelector('.field-sub > span');
-        const confirmation = page.querySelector('.bote-notices .color-success .bote-notice-body');
-        if (!updatedValue || !updatedSelection || !confirmation) {
-          throw new Error('Ticket information missing');
-        }
-        field.querySelector('.data-value').textContent = updatedValue.textContent;
-        field.querySelector('.field-sub > span').textContent = updatedSelection.textContent;
-        field.dataset.chairSource = updatedField.dataset.chairSource || '';
-        field.querySelector('.dropdown').classList.remove('open');
-        toggle.disabled = false;
-        toggle.focus({preventScroll: true});
-        success.textContent = confirmation.textContent;
+        success.textContent = information.field.querySelector('.chair-update-success')?.textContent
+          || information.field.dataset.successText || field.dataset.successText || information.value;
         success.hidden = false;
       } catch {
+        if (saved) {
+          // The POST succeeded, but the old display is no longer verified.
+          delete field.dataset.chairSource;
+          error.textContent = field.dataset.refreshErrorText || defaultError;
+        }
         error.hidden = false;
       } finally {
         saving = false;

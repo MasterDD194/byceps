@@ -208,6 +208,10 @@ def test_theme_ticket_partial_uses_core_urls_and_displays_all_states(
         html = env.get_template(
             'site/ticketing/_chair_information.html'
         ).render(ticket=ticket, ticket_management_enabled=True)
+        ticket.code = 'FIXTURE"<>&'
+        escaped_html = env.get_template(
+            'site/ticketing/_chair_information.html'
+        ).render(ticket=ticket, ticket_management_enabled=True)
 
     assert label in html
     if checked_in:
@@ -227,3 +231,13 @@ def test_theme_ticket_partial_uses_core_urls_and_displays_all_states(
         assert 'I need a provided chair' in html
         assert ('Make selection' in html) is (source is ChairSource.unknown)
     assert f'data-chair-source="{source.name}"' in html
+    assert (
+        'data-success-text="Chair source of ticket FIXTURE has been set."'
+        in html
+    )
+    assert 'data-refresh-error-text="The save request succeeded,' in html
+    assert 'data-conflict-text="The current chair information differs' in html
+    assert (
+        'data-success-text="Chair source of ticket FIXTURE&#34;&lt;&gt;&amp; has been set."'
+        in escaped_html
+    )

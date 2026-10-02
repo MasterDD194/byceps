@@ -45,7 +45,7 @@
       {%- with seat_manager = ticket.get_seat_manager(),
                user_manager = ticket.get_user_manager()
        %}
-    <li>
+    <li id="ticket-{{ ticket.id }}">
       <div class="ticket-card{% if ticket.used_by_id == g.user.id %} ticket-used-by-me{% endif %}">
 
         {# icon, code #}
