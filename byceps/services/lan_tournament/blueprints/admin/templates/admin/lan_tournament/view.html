@@ -149,6 +149,7 @@
 {%- endblock %}
 
 {% block before_body %}
+{{ super() }}
 <a class="lt-tv-backlink" href="{{ url_for('.index', party_id=party.id) }}">‹ {{ _('Tournaments') }}</a>
 {%- endblock %}
 
